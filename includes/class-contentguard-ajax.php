@@ -20,23 +20,60 @@ class ContentGuard_AJAX {
     }
 
     public function init() {
-        // Enhanced AJAX handlers using our value calculation system
+        // **CRITICAL FIX: Actually register the AJAX actions with WordPress**
         add_action('wp_ajax_contentguard_get_detections', [$this, 'ajax_get_detections']);
         add_action('wp_ajax_contentguard_get_stats', [$this, 'ajax_get_enhanced_stats']);
         add_action('wp_ajax_contentguard_test', [$this, 'ajax_test']);
         add_action('wp_ajax_contentguard_get_valuation_details', [$this, 'ajax_get_valuation_details']);
         add_action('wp_ajax_contentguard_analyze_content', [$this, 'ajax_analyze_content']);
         add_action('wp_ajax_contentguard_get_portfolio_analysis', [$this, 'ajax_get_portfolio_analysis']);
+        
+        // Add debugging
+        add_action('wp_ajax_contentguard_debug', [$this, 'ajax_debug']);
+    }
+
+    /**
+     * DEBUG: Test AJAX connectivity
+     */
+    public function ajax_debug() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'contentguard_detections';
+        
+        $debug_info = [
+            'timestamp' => current_time('mysql'),
+            'table_exists' => $wpdb->get_var("SHOW TABLES LIKE '$table_name'") == $table_name,
+            'total_detections' => 0,
+            'sample_detection' => null
+        ];
+        
+        if ($debug_info['table_exists']) {
+            $debug_info['total_detections'] = $wpdb->get_var("SELECT COUNT(*) FROM $table_name");
+            $debug_info['sample_detection'] = $wpdb->get_row("SELECT * FROM $table_name LIMIT 1", ARRAY_A);
+            $debug_info['recent_detections'] = $wpdb->get_var("SELECT COUNT(*) FROM $table_name WHERE detected_at > DATE_SUB(NOW(), INTERVAL 30 DAY)");
+        }
+        
+        wp_send_json_success($debug_info);
     }
 
     /**
      * Enhanced AJAX handlers using our value calculation system
      */
     public function ajax_get_enhanced_stats() {
-        check_ajax_referer('contentguard_nonce', 'nonce');
+        // Add nonce check but with better error handling
+        if (!check_ajax_referer('contentguard_nonce', 'nonce', false)) {
+            wp_send_json_error('Security check failed');
+            return;
+        }
         
         global $wpdb;
         $table_name = $wpdb->prefix . 'contentguard_detections';
+        
+        // Check if table exists
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") == $table_name;
+        if (!$table_exists) {
+            wp_send_json_error('Database table not found');
+            return;
+        }
         
         // Get detections from last 30 days for portfolio analysis
         $detections = $wpdb->get_results($wpdb->prepare(
@@ -105,24 +142,61 @@ class ContentGuard_AJAX {
     }
 
     public function ajax_get_detections() {
-        check_ajax_referer('contentguard_nonce', 'nonce');
+        // Better nonce handling
+        if (!check_ajax_referer('contentguard_nonce', 'nonce', false)) {
+            wp_send_json_error('Security check failed');
+            return;
+        }
         
         global $wpdb;
         $table_name = $wpdb->prefix . 'contentguard_detections';
         
+        // Check if table exists
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") == $table_name;
+        if (!$table_exists) {
+            wp_send_json_success([
+                'message' => 'Database table not found. Please activate the plugin.',
+                'detections' => [],
+                'suggestions' => [
+                    'Deactivate and reactivate the ContentGuard plugin',
+                    'Check database permissions',
+                    'Contact support if issue persists'
+                ]
+            ]);
+            return;
+        }
+        
         $limit = intval($_POST['limit'] ?? 20);
         $offset = intval($_POST['offset'] ?? 0);
         
-        $detections = $wpdb->get_results($wpdb->prepare(
-            "SELECT *, 
-             COALESCE(estimated_value, 0) as estimated_value,
-             COALESCE(content_type, 'article') as content_type,
-             COALESCE(licensing_potential, 'low') as licensing_potential
-             FROM $table_name 
-             WHERE detected_at > DATE_SUB(NOW(), INTERVAL 30 DAY) 
-             ORDER BY detected_at DESC LIMIT %d OFFSET %d",
-            $limit, $offset
-        ));
+        // Check if estimated_value column exists
+        $columns = $wpdb->get_results("SHOW COLUMNS FROM $table_name LIKE 'estimated_value'");
+        $has_estimated_value = !empty($columns);
+        
+        if ($has_estimated_value) {
+            $detections = $wpdb->get_results($wpdb->prepare(
+                "SELECT *, 
+                 COALESCE(estimated_value, 0) as estimated_value,
+                 COALESCE(content_type, 'article') as content_type,
+                 COALESCE(licensing_potential, 'low') as licensing_potential
+                 FROM $table_name 
+                 WHERE detected_at > DATE_SUB(NOW(), INTERVAL 30 DAY) 
+                 ORDER BY detected_at DESC LIMIT %d OFFSET %d",
+                $limit, $offset
+            ), ARRAY_A);
+        } else {
+            // Fallback for tables without enhanced columns
+            $detections = $wpdb->get_results($wpdb->prepare(
+                "SELECT *,
+                 0 as estimated_value,
+                 'article' as content_type,
+                 'low' as licensing_potential
+                 FROM $table_name 
+                 WHERE detected_at > DATE_SUB(NOW(), INTERVAL 30 DAY) 
+                 ORDER BY detected_at DESC LIMIT %d OFFSET %d",
+                $limit, $offset
+            ), ARRAY_A);
+        }
         
         // If no detections found, provide a helpful message
         if (empty($detections)) {
@@ -131,8 +205,9 @@ class ContentGuard_AJAX {
                 'detections' => [],
                 'suggestions' => [
                     'Check that ContentGuard detection is enabled in settings',
-                    'Visit your site with a bot user agent to test detection',
-                    'Ensure the plugin is properly activated'
+                    'Visit your site with a bot user agent to test detection: Mozilla/5.0 (compatible; GPTBot/1.0; +https://openai.com/gptbot)',
+                    'Ensure the plugin is properly activated',
+                    'Check that your site is publicly accessible to bots'
                 ]
             ]);
             return;
@@ -142,7 +217,10 @@ class ContentGuard_AJAX {
     }
 
     public function ajax_get_valuation_details() {
-        check_ajax_referer('contentguard_nonce', 'nonce');
+        if (!check_ajax_referer('contentguard_nonce', 'nonce', false)) {
+            wp_send_json_error('Security check failed');
+            return;
+        }
         
         $detection_id = intval($_POST['detection_id'] ?? 0);
         
@@ -178,7 +256,10 @@ class ContentGuard_AJAX {
     }
 
     public function ajax_analyze_content() {
-        check_ajax_referer('contentguard_nonce', 'nonce');
+        if (!check_ajax_referer('contentguard_nonce', 'nonce', false)) {
+            wp_send_json_error('Security check failed');
+            return;
+        }
         
         $url = sanitize_url($_POST['url'] ?? '');
         
@@ -192,7 +273,10 @@ class ContentGuard_AJAX {
     }
 
     public function ajax_get_portfolio_analysis() {
-        check_ajax_referer('contentguard_nonce', 'nonce');
+        if (!check_ajax_referer('contentguard_nonce', 'nonce', false)) {
+            wp_send_json_error('Security check failed');
+            return;
+        }
         
         global $wpdb;
         $table_name = $wpdb->prefix . 'contentguard_detections';
@@ -247,4 +331,3 @@ class ContentGuard_AJAX {
         ]);
     }
 }
-?>

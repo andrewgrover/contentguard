@@ -1,7 +1,7 @@
 <?php
 /**
  * ContentGuard Admin Class
- * Handles all admin interface functionality
+ * Handles all admin interface functionality - FIXED SCRIPT LOADING
  */
 
 // Prevent direct access
@@ -28,6 +28,102 @@ class ContentGuard_Admin {
         
         // Dashboard widget
         add_action('wp_dashboard_setup', [$this, 'add_dashboard_widget']);
+        
+        // Debug admin scripts loading
+        add_action('admin_footer', [$this, 'debug_script_loading']);
+    }
+
+    public function admin_scripts($hook) {
+        // Debug what page we're on
+        error_log("ContentGuard: admin_scripts called on hook: $hook");
+        
+        // Load on ALL admin pages for now to debug
+        // Later we can restrict to: if (strpos($hook, 'contentguard') === false) return;
+        
+        // Make sure we have the plugin URL constant
+        if (!defined('CONTENTGUARD_PLUGIN_URL')) {
+            error_log("ContentGuard: CONTENTGUARD_PLUGIN_URL not defined!");
+            return;
+        }
+        
+        $plugin_url = CONTENTGUARD_PLUGIN_URL;
+        $version = defined('CONTENTGUARD_VERSION') ? CONTENTGUARD_VERSION : '2.0.0';
+        
+        // Build file paths
+        $admin_js_url = $plugin_url . 'admin.js';
+        $admin_css_url = $plugin_url . 'admin.css';
+        $chart_js_url = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js';
+        
+        // Check if files exist
+        $admin_js_path = CONTENTGUARD_PLUGIN_PATH . 'admin.js';
+        $admin_css_path = CONTENTGUARD_PLUGIN_PATH . 'admin.css';
+        
+        error_log("ContentGuard: Checking files...");
+        error_log("  admin.js exists: " . (file_exists($admin_js_path) ? 'YES' : 'NO') . " at $admin_js_path");
+        error_log("  admin.css exists: " . (file_exists($admin_css_path) ? 'YES' : 'NO') . " at $admin_css_path");
+        error_log("  admin.js URL: $admin_js_url");
+        
+        // Enqueue Chart.js first
+        wp_enqueue_script('chart-js', $chart_js_url, [], '3.9.1');
+        
+        // Enqueue our admin styles
+        if (file_exists($admin_css_path)) {
+            wp_enqueue_style('contentguard-admin', $admin_css_url, [], $version);
+            error_log("ContentGuard: admin.css enqueued successfully");
+        } else {
+            error_log("ContentGuard: admin.css file not found!");
+        }
+        
+        // Enqueue our admin scripts
+        if (file_exists($admin_js_path)) {
+            wp_enqueue_script('contentguard-admin', $admin_js_url, ['jquery', 'chart-js'], $version, true);
+            error_log("ContentGuard: admin.js enqueued successfully");
+            
+            // Localize script with AJAX data
+            wp_localize_script('contentguard-admin', 'contentguard_ajax', [
+                'ajax_url' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('contentguard_nonce'),
+                'version' => $version,
+                'plugin_url' => $plugin_url,
+                'settings_url' => admin_url('admin.php?page=contentguard-settings'),
+                'debug' => WP_DEBUG
+            ]);
+            error_log("ContentGuard: AJAX data localized");
+        } else {
+            error_log("ContentGuard: admin.js file not found at $admin_js_path");
+        }
+    }
+    
+    /**
+     * Debug script loading in admin footer
+     */
+    public function debug_script_loading() {
+        global $wp_scripts;
+        
+        // Only on ContentGuard pages
+        $screen = get_current_screen();
+        if ($screen && strpos($screen->id, 'contentguard') !== false) {
+            echo "<script>console.log('ContentGuard Debug: Script loading check');</script>\n";
+            
+            // Check if our script is registered
+            if (isset($wp_scripts->registered['contentguard-admin'])) {
+                $script = $wp_scripts->registered['contentguard-admin'];
+                echo "<script>console.log('ContentGuard script registered:', " . json_encode([
+                    'src' => $script->src,
+                    'deps' => $script->deps,
+                    'ver' => $script->ver
+                ]) . ");</script>\n";
+            } else {
+                echo "<script>console.error('ContentGuard script NOT registered!');</script>\n";
+            }
+            
+            // Check if our script is in queue
+            if (in_array('contentguard-admin', $wp_scripts->queue)) {
+                echo "<script>console.log('ContentGuard script is in queue');</script>\n";
+            } else {
+                echo "<script>console.error('ContentGuard script NOT in queue!');</script>\n";
+            }
+        }
     }
 
     public function add_admin_menu() {
@@ -69,22 +165,6 @@ class ContentGuard_Admin {
         );
     }
 
-    public function admin_scripts($hook) {
-        if (strpos($hook, 'contentguard') === false) {
-            return;
-        }
-
-        wp_enqueue_script('chart-js', 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js', [], '3.9.1');
-        wp_enqueue_script('contentguard-admin', CONTENTGUARD_PLUGIN_URL . 'admin.js', ['jquery', 'chart-js'], CONTENTGUARD_VERSION);
-        wp_enqueue_style('contentguard-admin', CONTENTGUARD_PLUGIN_URL . 'admin.css', [], CONTENTGUARD_VERSION);
-        
-        wp_localize_script('contentguard-admin', 'contentguard_ajax', [
-            'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('contentguard_nonce'),
-            'version' => CONTENTGUARD_VERSION
-        ]);
-    }
-
     /**
      * Enhanced admin page with our value calculation system
      */
@@ -97,11 +177,27 @@ class ContentGuard_Admin {
         $portfolio_analysis = $this->value_calculator->calculatePortfolioValue($detections);
         
         ?>
-        <div class="wrap contentguard-admin">
+        <div class="wrap contentguard-admin" id="contentguard-dashboard">
             <h1>
                 <span class="dashicons dashicons-shield-alt"></span>
                 ContentGuard - Enhanced AI Bot Detection v<?php echo CONTENTGUARD_VERSION; ?>
             </h1>
+            
+            <!-- Debug Info -->
+            <div class="notice notice-info">
+                <h4>🔧 Debug Information</h4>
+                <p><strong>Plugin URL:</strong> <?php echo CONTENTGUARD_PLUGIN_URL; ?></p>
+                <p><strong>Plugin Path:</strong> <?php echo CONTENTGUARD_PLUGIN_PATH; ?></p>
+                <p><strong>admin.js exists:</strong> <?php echo file_exists(CONTENTGUARD_PLUGIN_PATH . 'admin.js') ? 'YES' : 'NO'; ?></p>
+                <p><strong>Current Hook:</strong> <span id="current-hook">Loading...</span></p>
+                <script>
+                document.getElementById('current-hook').textContent = '<?php echo get_current_screen()->id ?? 'unknown'; ?>';
+                console.log('ContentGuard page loaded, checking scripts...');
+                console.log('jQuery loaded:', typeof jQuery !== 'undefined');
+                console.log('Chart.js loaded:', typeof Chart !== 'undefined');
+                console.log('contentguard_ajax object:', typeof contentguard_ajax !== 'undefined' ? contentguard_ajax : 'NOT FOUND');
+                </script>
+            </div>
             
             <div class="notice notice-info">
                 <h4>🚀 Enhanced Valuation System Active</h4>
@@ -288,6 +384,8 @@ class ContentGuard_Admin {
         </style>
         <?php
     }
+
+    // ... rest of your existing methods (valuation_page, licensing_page, settings_page, add_dashboard_widget, dashboard_widget_content) stay the same ...
 
     /**
      * Enhanced valuation page using our value calculator
@@ -549,4 +647,3 @@ class ContentGuard_Admin {
         <?php
     }
 }
-?>

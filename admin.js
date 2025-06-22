@@ -166,101 +166,6 @@ jQuery(document).ready(function($) {
         }
     }
     
-    function loadRecentDetections() {
-        $.post(contentguard_ajax.ajax_url, {
-            action: 'contentguard_get_detections',
-            nonce: contentguard_ajax.nonce,
-            limit: 20,
-            offset: 0
-        }, function(response) {
-            if (response.success) {
-                displayDetections(response.data);
-            }
-        }).fail(function() {
-            console.log('Failed to load recent detections');
-            $('#recent-detections').html('<div class="contentguard-no-data">Failed to load detection data. Check your network connection.</div>');
-        });
-    }
-    
-    function displayDetections(detections) {
-        const container = $('#recent-detections');
-        
-        if (!detections || detections.length === 0) {
-            container.html('<div class="contentguard-no-data">No AI bot detections found in the last 30 days. Install a user agent switcher and visit your site with bot user agents to test the detection.</div>');
-            return;
-        }
-        
-        let html = '<div class="contentguard-detections-table">';
-        html += '<div class="detection-header">';
-        html += '<div class="detection-col-time">Time</div>';
-        html += '<div class="detection-col-company">Company</div>';
-        html += '<div class="detection-col-bot">Bot Type</div>';
-        html += '<div class="detection-col-page">Page</div>';
-        html += '<div class="detection-col-risk">Risk</div>';
-        html += '<div class="detection-col-value">Est. Value</div>';
-        html += '</div>';
-        
-        detections.forEach(function(detection) {
-            const date = new Date(detection.detected_at);
-            const timeAgo = getTimeAgo(date);
-            const riskClass = getRiskClass(detection.risk_level);
-            const estimatedValue = detection.commercial_risk ? '$2.50' : '$0.00';
-            
-            html += '<div class="detection-row">';
-            html += `<div class="detection-col-time">${timeAgo}</div>`;
-            html += `<div class="detection-col-company">${escapeHtml(detection.company || 'Unknown')}</div>`;
-            html += `<div class="detection-col-bot">${escapeHtml(detection.bot_type || 'Unknown')}</div>`;
-            html += `<div class="detection-col-page">${escapeHtml(detection.request_uri ? detection.request_uri.substring(0, 50) : '')}${detection.request_uri && detection.request_uri.length > 50 ? '...' : ''}</div>`;
-            html += `<div class="detection-col-risk"><span class="risk-badge ${riskClass}">${detection.risk_level || 'unknown'}</span></div>`;
-            html += `<div class="detection-col-value">${estimatedValue}</div>`;
-            html += '</div>';
-        });
-        
-        html += '</div>';
-        
-        // Add summary stats
-        const totalValue = detections.filter(d => d.commercial_risk).length * 2.50;
-        const highRiskCount = detections.filter(d => d.risk_level === 'high').length;
-        
-        html += '<div class="contentguard-summary">';
-        html += `<div class="summary-item"><strong>${detections.length}</strong> total detections</div>`;
-        html += `<div class="summary-item"><strong>${highRiskCount}</strong> high-risk bots</div>`;
-        html += `<div class="summary-item"><strong>$${totalValue.toFixed(2)}</strong> estimated content value</div>`;
-        html += '</div>';
-        
-        container.html(html);
-    }
-    
-    function getTimeAgo(date) {
-        const now = new Date();
-        const diffMs = now - date;
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMs / 3600000);
-        const diffDays = Math.floor(diffMs / 86400000);
-        
-        if (diffMins < 1) return 'Just now';
-        if (diffMins < 60) return `${diffMins}m ago`;
-        if (diffHours < 24) return `${diffHours}h ago`;
-        if (diffDays < 7) return `${diffDays}d ago`;
-        return date.toLocaleDateString();
-    }
-    
-    function getRiskClass(riskLevel) {
-        switch(riskLevel) {
-            case 'high': return 'risk-high';
-            case 'medium': return 'risk-medium';
-            case 'low': return 'risk-low';
-            default: return 'risk-unknown';
-        }
-    }
-    
-    function escapeHtml(text) {
-        if (!text) return '';
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-    
     function showNotification(message, type = 'info') {
         const notification = $(`
             <div class="contentguard-notification ${type}">
@@ -436,5 +341,163 @@ jQuery(document).ready(function($) {
         console.log('ContentGuard admin JavaScript loaded successfully');
     } else {
         console.error('ContentGuard AJAX object not found');
+    }
+
+    function loadRecentDetections() {
+        console.log('Loading recent detections...');
+        
+        $.post(contentguard_ajax.ajax_url, {
+            action: 'contentguard_get_detections',
+            nonce: contentguard_ajax.nonce,
+            limit: 20,
+            offset: 0
+        }, function(response) {
+            console.log('Detections response:', response);
+            
+            if (response.success) {
+                if (response.data.message) {
+                    // Handle case where no detections found
+                    displayNoDetections(response.data);
+                } else {
+                    // Display the detections
+                    displayDetections(response.data);
+                }
+            } else {
+                console.error('Failed to load detections:', response);
+                $('#recent-detections').html('<div class="contentguard-no-data">Failed to load detection data. Check browser console for details.</div>');
+            }
+        }).fail(function(xhr, status, error) {
+            console.error('Detections AJAX failed:', error, xhr.responseText);
+            $('#recent-detections').html('<div class="contentguard-no-data">Failed to load detection data. Check your network connection.</div>');
+        });
+    }
+
+    function displayNoDetections(data) {
+        const container = $('#recent-detections');
+        
+        let html = '<div class="contentguard-no-data">';
+        html += '<h4>No AI Bot Detections Found</h4>';
+        html += '<p>' + data.message + '</p>';
+        
+        if (data.suggestions) {
+            html += '<h5>Suggestions:</h5>';
+            html += '<ul>';
+            data.suggestions.forEach(function(suggestion) {
+                html += '<li>' + escapeHtml(suggestion) + '</li>';
+            });
+            html += '</ul>';
+        }
+        
+        html += '<div style="margin-top: 15px;">';
+        html += '<button class="button button-primary" onclick="testDetection()">Test Detection</button>';
+        html += '<a href="' + (contentguard_ajax.settings_url || '#') + '" class="button" style="margin-left: 10px;">Check Settings</a>';
+        html += '</div>';
+        html += '</div>';
+        
+        container.html(html);
+    }
+
+    function testDetection() {
+        // Fill in test user agent if test form is visible
+        const testInput = $('#test-user-agent');
+        if (testInput.length) {
+            testInput.val('Mozilla/5.0 (compatible; GPTBot/1.0; +https://openai.com/gptbot)');
+            testInput.focus();
+            
+            // Scroll to test form
+            $('html, body').animate({
+                scrollTop: testInput.closest('.contentguard-panel').offset().top - 50
+            }, 500);
+        } else {
+            alert('Please use the test form below to test bot detection.');
+        }
+    }
+
+    function displayDetections(detections) {
+        const container = $('#recent-detections');
+        
+        if (!detections || detections.length === 0) {
+            displayNoDetections({
+                message: 'No AI bot detections found in the last 30 days.',
+                suggestions: [
+                    'Install a user agent switcher and visit your site with bot user agents to test detection',
+                    'Check that ContentGuard detection is enabled in settings'
+                ]
+            });
+            return;
+        }
+        
+        let html = '<div class="contentguard-detections-table">';
+        html += '<div class="detection-header">';
+        html += '<div class="detection-col-time">Time</div>';
+        html += '<div class="detection-col-company">Company</div>';
+        html += '<div class="detection-col-bot">Bot Type</div>';
+        html += '<div class="detection-col-page">Page</div>';
+        html += '<div class="detection-col-risk">Risk</div>';
+        html += '<div class="detection-col-value">Est. Value</div>';
+        html += '</div>';
+        
+        detections.forEach(function(detection) {
+            const date = new Date(detection.detected_at);
+            const timeAgo = getTimeAgo(date);
+            const riskClass = getRiskClass(detection.risk_level);
+            const estimatedValue = detection.estimated_value ? parseFloat(detection.estimated_value) : 0;
+            const displayValue = estimatedValue > 0 ? '$' + estimatedValue.toFixed(2) : '$0.00';
+            
+            html += '<div class="detection-row">';
+            html += `<div class="detection-col-time">${timeAgo}</div>`;
+            html += `<div class="detection-col-company">${escapeHtml(detection.company || 'Unknown')}</div>`;
+            html += `<div class="detection-col-bot">${escapeHtml(detection.bot_type || 'Unknown')}</div>`;
+            html += `<div class="detection-col-page">${escapeHtml(detection.request_uri ? detection.request_uri.substring(0, 50) : '')}${detection.request_uri && detection.request_uri.length > 50 ? '...' : ''}</div>`;
+            html += `<div class="detection-col-risk"><span class="risk-badge ${riskClass}">${detection.risk_level || 'unknown'}</span></div>`;
+            html += `<div class="detection-col-value">${displayValue}</div>`;
+            html += '</div>';
+        });
+        
+        html += '</div>';
+        
+        // Add summary stats
+        const totalValue = detections.reduce((sum, d) => sum + (parseFloat(d.estimated_value) || 0), 0);
+        const highRiskCount = detections.filter(d => d.risk_level === 'high').length;
+        const commercialCount = detections.filter(d => d.commercial_risk == 1).length;
+        
+        html += '<div class="contentguard-summary">';
+        html += `<div class="summary-item"><strong>${detections.length}</strong> total detections</div>`;
+        html += `<div class="summary-item"><strong>${highRiskCount}</strong> high-risk bots</div>`;
+        html += `<div class="summary-item"><strong>${commercialCount}</strong> commercial bots</div>`;
+        html += `<div class="summary-item"><strong>$${totalValue.toFixed(2)}</strong> estimated content value</div>`;
+        html += '</div>';
+        
+        container.html(html);
+    }
+
+    function getTimeAgo(date) {
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+        
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        if (diffDays < 7) return `${diffDays}d ago`;
+        return date.toLocaleDateString();
+    }
+
+    function getRiskClass(riskLevel) {
+        switch(riskLevel) {
+            case 'high': return 'risk-high';
+            case 'medium': return 'risk-medium';
+            case 'low': return 'risk-low';
+            default: return 'risk-unknown';
+        }
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 });

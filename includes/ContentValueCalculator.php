@@ -520,12 +520,16 @@ class ContentGuardValueCalculator {
             $company_breakdown[$company] = ($company_breakdown[$company] ?? 0) + $value;
         }
         
+        // Sort company breakdown by value (arsort modifies array in place and returns boolean)
+        arsort($company_breakdown);
+        $top_value_companies = array_slice($company_breakdown, 0, 5, true);
+        
         return [
             'total_portfolio_value' => round($total_value, 2),
             'average_value_per_access' => round($total_value / max(1, count($detections)), 2),
             'high_value_content_count' => $high_value_content,
             'licensing_candidates' => $licensing_candidates,
-            'top_value_companies' => array_slice(arsort($company_breakdown) ?: [], 0, 5, true),
+            'top_value_companies' => $top_value_companies,
             'estimated_annual_revenue' => round($total_value * 0.15, 2), // Conservative 15% licensing rate
             'recommendations' => $this->generatePortfolioRecommendations($total_value, $licensing_candidates)
         ];

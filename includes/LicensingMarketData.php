@@ -289,7 +289,7 @@ class ContentGuardLicensingMarketData {
         }
         
         // Base rate calculation (using academic article access as baseline)
-        $base_rate = self::$academic_publishing_rates['access_fees']['avg'];
+        $base_rate = self::$academic_publishing_rates['access_fees']['per_article_download']['avg'] ?? 35;
         
         return $base_rate * $base_multiplier * $company_multiplier * $market_adjustment;
     }

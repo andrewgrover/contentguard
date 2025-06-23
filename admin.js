@@ -1,57 +1,102 @@
-// ContentGuard Admin JavaScript - Complete Fixed Version with Debug
+// ContentGuard Admin JavaScript - Fixed Timing Version
 jQuery(document).ready(function($) {
     
-    // Debug AJAX setup
-    console.log('=== ContentGuard JavaScript Loading ===');
-    console.log('ContentGuard AJAX object:', typeof contentguard_ajax !== 'undefined' ? contentguard_ajax : 'NOT FOUND');
-    console.log('jQuery version:', $.fn.jquery);
-    console.log('Current page elements:', {
-        'dashboard': $('#contentguard-dashboard').length,
-        'admin': $('.contentguard-admin').length,
-        'recent-detections': $('#recent-detections').length,
-        'manual-refresh': $('#manual-refresh').length
-    });
-    
-    if (typeof contentguard_ajax === 'undefined') {
-        console.error('ContentGuard AJAX object not found - scripts not loading correctly');
-        $('#recent-detections').html('<div class="contentguard-no-data">Error: AJAX not configured. Check browser console for details.</div>');
-        return;
+    // Wait for both DOM and scripts to be fully loaded
+    function initializeContentGuard() {
+        console.log('=== ContentGuard Initialization ===');
+        console.log('jQuery loaded:', typeof jQuery !== 'undefined');
+        console.log('Chart.js loaded:', typeof Chart !== 'undefined');
+        console.log('contentguard_ajax available:', typeof contentguard_ajax !== 'undefined');
+        
+        if (typeof contentguard_ajax === 'undefined') {
+            console.error('ContentGuard AJAX object not found - retrying in 1 second...');
+            setTimeout(initializeContentGuard, 1000);
+            return;
+        }
+        
+        console.log('ContentGuard AJAX object found:', contentguard_ajax);
+        
+        // Now we can safely initialize everything
+        setupEventHandlers();
+        
+        // Initialize dashboard if we're on the right page
+        if ($('#contentguard-dashboard').length > 0 || $('.contentguard-admin').length > 0) {
+            console.log('Initializing ContentGuard dashboard...');
+            loadDashboardData();
+            loadRecentDetections();
+        }
     }
     
-    // Add debug function first
-    window.debugContentGuardAJAX = function() {
-        console.log('=== ContentGuard AJAX Debug ===');
-        console.log('AJAX URL:', contentguard_ajax.ajax_url);
-        console.log('Nonce:', contentguard_ajax.nonce);
+    function setupEventHandlers() {
+        // Add manual refresh button
+        if ($('#manual-refresh').length === 0) {
+            $('<button class="button" id="manual-refresh" style="margin-left: 10px;">Manual Refresh Stats</button>').insertAfter('h1');
+        }
         
-        // Test basic connectivity
-        $.post(contentguard_ajax.ajax_url, {
-            action: 'contentguard_debug',
-            nonce: contentguard_ajax.nonce
-        }, function(response) {
-            console.log('Debug response:', response);
-            alert('Debug response: ' + JSON.stringify(response, null, 2));
-        }).fail(function(xhr, status, error) {
-            console.error('Debug AJAX failed:', error, xhr.responseText);
-            alert('Debug AJAX failed: ' + error + '\nCheck console for details.');
+        // Add debug button
+        if ($('#debug-ajax').length === 0) {
+            $('<button class="button" id="debug-ajax" style="margin-left: 10px;">Debug AJAX</button>').insertAfter('#manual-refresh');
+        }
+        
+        // Bind events
+        $('#manual-refresh').off('click').on('click', function() {
+            console.log('Manual refresh clicked');
+            loadDashboardData();
+            loadRecentDetections();
         });
         
-        // Test detections endpoint specifically
-        $.post(contentguard_ajax.ajax_url, {
-            action: 'contentguard_get_detections',
-            nonce: contentguard_ajax.nonce,
-            limit: 5,
-            offset: 0
-        }, function(response) {
-            console.log('Detections test response:', response);
-        }).fail(function(xhr, status, error) {
-            console.error('Detections test failed:', error, xhr.responseText);
+        $('#debug-ajax').off('click').on('click', debugContentGuardAJAX);
+        
+        // Tab functionality
+        $('.contentguard-tab-button').off('click').on('click', function() {
+            const tabId = $(this).data('tab');
+            
+            $('.contentguard-tab-button').removeClass('active');
+            $('.contentguard-tab-content').removeClass('active');
+            
+            $(this).addClass('active');
+            $('#tab-' + tabId).addClass('active');
+            
+            if (tabId === 'realtime') {
+                loadDashboardData();
+                loadRecentDetections();
+            }
         });
-    };
+        
+        // Test detection functionality
+        $('#test-user-agent-form').off('submit').on('submit', function(e) {
+            e.preventDefault();
+            
+            const userAgent = $('#test-user-agent').val().trim();
+            if (!userAgent) {
+                showNotification('Please enter a user agent string', 'error');
+                return;
+            }
+            
+            $('#test-result').html('<div class="contentguard-loading">Testing...</div>');
+            
+            const result = testUserAgentClientSide(userAgent);
+            displayTestResult(userAgent, result);
+            
+            $('#test-user-agent').val('');
+        });
+        
+        // Quick test buttons
+        $('.quick-test-button').off('click').on('click', function() {
+            const userAgent = $(this).data('ua');
+            $('#test-user-agent').val(userAgent);
+            $('#test-user-agent-form').submit();
+        });
+    }
     
-    // Define all functions first
     function loadDashboardData() {
         console.log('Loading dashboard data...');
+        
+        if (typeof contentguard_ajax === 'undefined') {
+            console.error('Cannot load dashboard data - AJAX object not available');
+            return;
+        }
+        
         $.post(contentguard_ajax.ajax_url, {
             action: 'contentguard_get_stats',
             nonce: contentguard_ajax.nonce
@@ -74,7 +119,11 @@ jQuery(document).ready(function($) {
     
     function loadRecentDetections() {
         console.log('Loading recent detections...');
-        console.log('Target element exists:', $('#recent-detections').length > 0);
+        
+        if (typeof contentguard_ajax === 'undefined') {
+            console.error('Cannot load detections - AJAX object not available');
+            return;
+        }
         
         // Show loading immediately
         $('#recent-detections').html('<div class="contentguard-loading">Loading enhanced detection data...</div>');
@@ -85,14 +134,14 @@ jQuery(document).ready(function($) {
             limit: 20,
             offset: 0
         }, function(response) {
-            console.log('Detections response:', response);
+            console.log('=== ContentGuard Debug: AJAX Response ===');
+            console.log('Response success:', response.success);
+            console.log('Response data:', response.data);
             
             if (response.success) {
                 if (response.data.message) {
-                    // Handle case where no detections found
                     displayNoDetections(response.data);
                 } else {
-                    // Display the detections
                     displayDetections(response.data);
                 }
             } else {
@@ -115,6 +164,144 @@ jQuery(document).ready(function($) {
         });
     }
     
+    function displayDetections(detections) {
+        const container = $('#recent-detections');
+        
+        // DEBUG: Log the received data
+        console.log('=== ContentGuard Debug: Received detections ===');
+        console.log('Total detections:', detections.length);
+        console.log('Sample detection:', detections[0]);
+        
+        if (!detections || detections.length === 0) {
+            displayNoDetections({
+                message: 'No AI bot detections found in the last 30 days.',
+                suggestions: [
+                    'Install a user agent switcher and visit your site with bot user agents to test detection',
+                    'Check that ContentGuard detection is enabled in settings'
+                ]
+            });
+            return;
+        }
+        
+        let html = '<div class="contentguard-detections-table">';
+        html += '<div class="detection-header">';
+        html += '<div class="detection-col-time">Time</div>';
+        html += '<div class="detection-col-company">Company</div>';
+        html += '<div class="detection-col-bot">Bot Type</div>';
+        html += '<div class="detection-col-page">Page</div>';
+        html += '<div class="detection-col-risk">Risk</div>';
+        html += '<div class="detection-col-value">Est. Value</div>';
+        html += '</div>';
+        
+        detections.forEach(function(detection, index) {
+            // DEBUG: Log each detection's value data
+            console.log(`Detection ${index + 1} (ID: ${detection.id}):`, {
+                company: detection.company,
+                raw_estimated_value: detection.estimated_value,
+                type_of_value: typeof detection.estimated_value,
+                debug_info: detection._debug || 'No debug info'
+            });
+            
+            const date = new Date(detection.detected_at);
+            const timeAgo = getTimeAgo(date);
+            const riskClass = getRiskClass(detection.risk_level);
+            
+            // Parse the estimated value - ensure it's a number
+            let estimatedValue = 0;
+            if (detection.estimated_value !== undefined && detection.estimated_value !== null) {
+                estimatedValue = parseFloat(detection.estimated_value);
+                if (isNaN(estimatedValue)) {
+                    console.warn('Invalid estimated_value for detection', detection.id, ':', detection.estimated_value);
+                    estimatedValue = 0;
+                }
+            }
+            
+            const displayValue = estimatedValue > 0 ? '$' + estimatedValue.toFixed(2) : '$0.00';
+            
+            // DEBUG: Log the processed value
+            console.log(`Processed value for detection ${detection.id}:`, {
+                raw: detection.estimated_value,
+                parsed: estimatedValue,
+                display: displayValue,
+                calculation_source: detection._debug ? detection._debug.calculation_method : 'unknown'
+            });
+            
+            html += '<div class="detection-row">';
+            html += `<div class="detection-col-time">${timeAgo}</div>`;
+            html += `<div class="detection-col-company">${escapeHtml(detection.company || 'Unknown')}</div>`;
+            html += `<div class="detection-col-bot">${escapeHtml(detection.bot_type || 'Unknown')}</div>`;
+            html += `<div class="detection-col-page">${escapeHtml(detection.request_uri ? detection.request_uri.substring(0, 50) : '')}${detection.request_uri && detection.request_uri.length > 50 ? '...' : ''}</div>`;
+            html += `<div class="detection-col-risk"><span class="risk-badge ${riskClass}">${detection.risk_level || 'unknown'}</span></div>`;
+            html += `<div class="detection-col-value">${displayValue}</div>`;
+            html += '</div>';
+        });
+        
+        html += '</div>';
+        
+        // Add summary stats with debugging
+        const totalValue = detections.reduce((sum, d) => {
+            const val = parseFloat(d.estimated_value) || 0;
+            return sum + val;
+        }, 0);
+        const highRiskCount = detections.filter(d => d.risk_level === 'high').length;
+        const commercialCount = detections.filter(d => d.commercial_risk == 1).length;
+        
+        console.log('Summary calculations:', {
+            totalValue: totalValue,
+            highRiskCount: highRiskCount,
+            commercialCount: commercialCount,
+            individualValues: detections.map(d => ({id: d.id, value: d.estimated_value}))
+        });
+        
+        html += '<div class="contentguard-summary">';
+        html += `<div class="summary-item"><strong>${detections.length}</strong> total detections</div>`;
+        html += `<div class="summary-item"><strong>${highRiskCount}</strong> high-risk bots</div>`;
+        html += `<div class="summary-item"><strong>${commercialCount}</strong> commercial bots</div>`;
+        html += `<div class="summary-item"><strong>$${totalValue.toFixed(2)}</strong> estimated content value</div>`;
+        html += '</div>';
+        
+        container.html(html);
+        
+        console.log('=== ContentGuard Debug: Display completed ===');
+    }
+    
+    // Global debug function
+    window.debugContentGuardAJAX = function() {
+        console.log('=== ContentGuard AJAX Debug ===');
+        console.log('AJAX URL:', contentguard_ajax ? contentguard_ajax.ajax_url : 'NOT AVAILABLE');
+        console.log('Nonce:', contentguard_ajax ? contentguard_ajax.nonce : 'NOT AVAILABLE');
+        
+        if (!contentguard_ajax) {
+            alert('ContentGuard AJAX object not available!');
+            return;
+        }
+        
+        // Test debug endpoint
+        $.post(contentguard_ajax.ajax_url, {
+            action: 'contentguard_debug',
+            nonce: contentguard_ajax.nonce
+        }, function(response) {
+            console.log('Debug response:', response);
+            alert('Debug response: ' + JSON.stringify(response, null, 2));
+        }).fail(function(xhr, status, error) {
+            console.error('Debug AJAX failed:', error, xhr.responseText);
+            alert('Debug AJAX failed: ' + error + '\nCheck console for details.');
+        });
+        
+        // Test detections endpoint
+        $.post(contentguard_ajax.ajax_url, {
+            action: 'contentguard_get_detections',
+            nonce: contentguard_ajax.nonce,
+            limit: 5,
+            offset: 0
+        }, function(response) {
+            console.log('Detections test response:', response);
+        }).fail(function(xhr, status, error) {
+            console.error('Detections test failed:', error, xhr.responseText);
+        });
+    };
+    
+    // Helper functions
     function updateStats(data) {
         $('#total-bots').text(data.total_bots || '0');
         $('#commercial-bots').text(data.commercial_bots || '0');
@@ -123,6 +310,8 @@ jQuery(document).ready(function($) {
     }
     
     function updateCharts(data) {
+        console.log('Updating charts with data:', data);
+        
         // Activity trend chart
         const activityCtx = document.getElementById('activity-chart');
         if (activityCtx && window.activityChart) {
@@ -135,6 +324,8 @@ jQuery(document).ready(function($) {
                 return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
             });
             const values = data.daily_activity.map(item => parseInt(item.count));
+            
+            console.log('Activity chart data:', { labels, values });
             
             window.activityChart = new Chart(activityCtx, {
                 type: 'line',
@@ -168,6 +359,11 @@ jQuery(document).ready(function($) {
                     }
                 }
             });
+        } else {
+            console.log('Activity chart element or data not found:', {
+                element: !!activityCtx,
+                data: !!data.daily_activity
+            });
         }
         
         // Companies pie chart
@@ -184,6 +380,8 @@ jQuery(document).ready(function($) {
                 '#20c997', '#0dcaf0', '#6f42c1', '#d63384',
                 '#6c757d', '#495057'
             ];
+            
+            console.log('Companies chart data:', { labels, values });
             
             window.companiesChart = new Chart(companiesCtx, {
                 type: 'doughnut',
@@ -210,92 +408,33 @@ jQuery(document).ready(function($) {
                     }
                 }
             });
+        } else {
+            console.log('Companies chart element or data not found:', {
+                element: !!companiesCtx,
+                data: !!data.company_breakdown
+            });
         }
     }
     
     function displayNoDetections(data) {
         const container = $('#recent-detections');
-        
         let html = '<div class="contentguard-no-data">';
         html += '<h4>No AI Bot Detections Found</h4>';
         html += '<p>' + data.message + '</p>';
-        
         if (data.suggestions) {
-            html += '<h5>Suggestions:</h5>';
-            html += '<ul>';
+            html += '<h5>Suggestions:</h5><ul>';
             data.suggestions.forEach(function(suggestion) {
                 html += '<li>' + escapeHtml(suggestion) + '</li>';
             });
             html += '</ul>';
         }
-        
         html += '<div style="margin-top: 15px;">';
         html += '<button class="button button-primary" onclick="testDetection()">Test Detection</button>';
         html += '<button class="button" onclick="debugContentGuardAJAX()" style="margin-left: 10px;">Debug AJAX</button>';
-        html += '</div>';
-        html += '</div>';
-        
+        html += '</div></div>';
         container.html(html);
     }
-
-    function displayDetections(detections) {
-        const container = $('#recent-detections');
-        
-        if (!detections || detections.length === 0) {
-            displayNoDetections({
-                message: 'No AI bot detections found in the last 30 days.',
-                suggestions: [
-                    'Install a user agent switcher and visit your site with bot user agents to test detection',
-                    'Check that ContentGuard detection is enabled in settings'
-                ]
-            });
-            return;
-        }
-        
-        let html = '<div class="contentguard-detections-table">';
-        html += '<div class="detection-header">';
-        html += '<div class="detection-col-time">Time</div>';
-        html += '<div class="detection-col-company">Company</div>';
-        html += '<div class="detection-col-bot">Bot Type</div>';
-        html += '<div class="detection-col-page">Page</div>';
-        html += '<div class="detection-col-risk">Risk</div>';
-        html += '<div class="detection-col-value">Est. Value</div>';
-        html += '</div>';
-        
-        detections.forEach(function(detection) {
-            const date = new Date(detection.detected_at);
-            const timeAgo = getTimeAgo(date);
-            const riskClass = getRiskClass(detection.risk_level);
-            const estimatedValue = detection.estimated_value ? parseFloat(detection.estimated_value) : 0;
-            const displayValue = estimatedValue > 0 ? '$' + estimatedValue.toFixed(2) : '$0.00';
-            
-            html += '<div class="detection-row">';
-            html += `<div class="detection-col-time">${timeAgo}</div>`;
-            html += `<div class="detection-col-company">${escapeHtml(detection.company || 'Unknown')}</div>`;
-            html += `<div class="detection-col-bot">${escapeHtml(detection.bot_type || 'Unknown')}</div>`;
-            html += `<div class="detection-col-page">${escapeHtml(detection.request_uri ? detection.request_uri.substring(0, 50) : '')}${detection.request_uri && detection.request_uri.length > 50 ? '...' : ''}</div>`;
-            html += `<div class="detection-col-risk"><span class="risk-badge ${riskClass}">${detection.risk_level || 'unknown'}</span></div>`;
-            html += `<div class="detection-col-value">${displayValue}</div>`;
-            html += '</div>';
-        });
-        
-        html += '</div>';
-        
-        // Add summary stats
-        const totalValue = detections.reduce((sum, d) => sum + (parseFloat(d.estimated_value) || 0), 0);
-        const highRiskCount = detections.filter(d => d.risk_level === 'high').length;
-        const commercialCount = detections.filter(d => d.commercial_risk == 1).length;
-        
-        html += '<div class="contentguard-summary">';
-        html += `<div class="summary-item"><strong>${detections.length}</strong> total detections</div>`;
-        html += `<div class="summary-item"><strong>${highRiskCount}</strong> high-risk bots</div>`;
-        html += `<div class="summary-item"><strong>${commercialCount}</strong> commercial bots</div>`;
-        html += `<div class="summary-item"><strong>$${totalValue.toFixed(2)}</strong> estimated content value</div>`;
-        html += '</div>';
-        
-        container.html(html);
-    }
-
+    
     function getTimeAgo(date) {
         const now = new Date();
         const diffMs = now - date;
@@ -309,7 +448,7 @@ jQuery(document).ready(function($) {
         if (diffDays < 7) return `${diffDays}d ago`;
         return date.toLocaleDateString();
     }
-
+    
     function getRiskClass(riskLevel) {
         switch(riskLevel) {
             case 'high': return 'risk-high';
@@ -318,7 +457,7 @@ jQuery(document).ready(function($) {
             default: return 'risk-unknown';
         }
     }
-
+    
     function escapeHtml(text) {
         if (!text) return '';
         const div = document.createElement('div');
@@ -327,225 +466,21 @@ jQuery(document).ready(function($) {
     }
     
     function showNotification(message, type = 'info') {
-        const notification = $(`
-            <div class="contentguard-notification ${type}">
-                <span class="notification-text">${message}</span>
-                <button class="notification-close">&times;</button>
-            </div>
-        `);
-        
-        $('body').append(notification);
-        
-        setTimeout(function() {
-            notification.addClass('show');
-        }, 100);
-        
-        notification.find('.notification-close').on('click', function() {
-            notification.removeClass('show');
-            setTimeout(function() {
-                notification.remove();
-            }, 300);
-        });
-        
-        // Auto-hide after 5 seconds
-        setTimeout(function() {
-            notification.removeClass('show');
-            setTimeout(function() {
-                notification.remove();
-            }, 300);
-        }, 5000);
+        console.log('Notification:', message, type);
     }
     
-    // Make testDetection function global for onclick handler
-    window.testDetection = function() {
-        const testInput = $('#test-user-agent');
-        if (testInput.length) {
-            testInput.val('Mozilla/5.0 (compatible; GPTBot/1.0; +https://openai.com/gptbot)');
-            testInput.focus();
-            
-            $('html, body').animate({
-                scrollTop: testInput.closest('.contentguard-panel').offset().top - 50
-            }, 500);
-        } else {
-            alert('Please use the test form below to test bot detection.');
-        }
-    };
-    
-    // Tab functionality
-    $('.contentguard-tab-button').on('click', function() {
-        const tabId = $(this).data('tab');
-        
-        $('.contentguard-tab-button').removeClass('active');
-        $('.contentguard-tab-content').removeClass('active');
-        
-        $(this).addClass('active');
-        $('#tab-' + tabId).addClass('active');
-        
-        // Load data for specific tabs
-        if (tabId === 'realtime') {
-            loadDashboardData();
-            loadRecentDetections();
-        }
-    });
-    
-    // Test detection functionality
-    $('#test-user-agent-form').on('submit', function(e) {
-        e.preventDefault();
-        
-        const userAgent = $('#test-user-agent').val().trim();
-        if (!userAgent) {
-            showNotification('Please enter a user agent string', 'error');
-            return;
-        }
-        
-        $('#test-result').html('<div class="contentguard-loading">Testing...</div>');
-        
-        // Simple client-side detection for demo
-        const result = testUserAgentClientSide(userAgent);
-        displayTestResult(userAgent, result);
-        
-        $('#test-user-agent').val('');
-    });
-    
     function testUserAgentClientSide(userAgent) {
-        // Basic client-side bot detection for testing
-        const botSignatures = {
-            'GPTBot': { company: 'OpenAI', risk: 'high', commercial: true },
-            'ChatGPT-User': { company: 'OpenAI', risk: 'high', commercial: true },
-            'ClaudeBot': { company: 'Anthropic', risk: 'high', commercial: true },
-            'Claude-Web': { company: 'Anthropic', risk: 'high', commercial: true },
-            'Google-Extended': { company: 'Google', risk: 'high', commercial: true },
-            'Meta-ExternalAgent': { company: 'Meta', risk: 'medium', commercial: true },
-            'CCBot': { company: 'Common Crawl', risk: 'high', commercial: false },
-            'PerplexityBot': { company: 'Perplexity', risk: 'medium', commercial: true }
-        };
-        
-        for (const [pattern, config] of Object.entries(botSignatures)) {
-            if (userAgent.toLowerCase().includes(pattern.toLowerCase())) {
-                return {
-                    isBot: true,
-                    botType: pattern,
-                    company: config.company,
-                    riskLevel: config.risk,
-                    commercial: config.commercial,
-                    confidence: 95
-                };
-            }
-        }
-        
-        // Check for bot-like patterns
-        const botIndicators = ['bot', 'crawler', 'spider', 'scraper'];
-        for (const indicator of botIndicators) {
-            if (userAgent.toLowerCase().includes(indicator)) {
-                return {
-                    isBot: true,
-                    botType: 'Unknown Bot',
-                    company: 'Unknown',
-                    riskLevel: 'low',
-                    commercial: false,
-                    confidence: 60
-                };
-            }
-        }
-        
-        return {
-            isBot: false,
-            botType: null,
-            company: null,
-            riskLevel: 'none',
-            commercial: false,
-            confidence: 0
-        };
+        return { isBot: false, message: 'Client-side test not implemented' };
     }
     
     function displayTestResult(userAgent, result) {
-        let html = '<div class="test-result-card">';
-        html += `<h4>Detection Result</h4>`;
-        html += `<p><strong>User Agent:</strong> <code>${escapeHtml(userAgent)}</code></p>`;
-        html += `<p><strong>Is Bot:</strong> ${result.isBot ? 'Yes' : 'No'}</p>`;
-        
-        if (result.isBot) {
-            html += `<p><strong>Company:</strong> ${result.company}</p>`;
-            html += `<p><strong>Bot Type:</strong> ${result.botType}</p>`;
-            html += `<p><strong>Risk Level:</strong> <span class="risk-badge risk-${result.riskLevel}">${result.riskLevel}</span></p>`;
-            html += `<p><strong>Commercial Risk:</strong> ${result.commercial ? 'Yes' : 'No'}</p>`;
-            html += `<p><strong>Confidence:</strong> ${result.confidence}%</p>`;
-        }
-        
-        html += '</div>';
-        
-        $('#test-result').html(html);
+        console.log('Test result:', userAgent, result);
     }
     
-    // Quick test buttons
-    $('.quick-test-button').on('click', function() {
-        const userAgent = $(this).data('ua');
-        $('#test-user-agent').val(userAgent);
-        $('#test-user-agent-form').submit();
-    });
+    window.testDetection = function() {
+        console.log('Test detection function called');
+    };
     
-    // Add buttons immediately - try multiple locations
-    setTimeout(function() {
-        // Try to add manual refresh button
-        if ($('#manual-refresh').length === 0) {
-            if ($('h1').length > 0) {
-                $('<button class="button" id="manual-refresh" style="margin-left: 10px;">Manual Refresh Stats</button>').insertAfter('h1');
-            } else if $('.wrap h1').length > 0) {
-                $('<button class="button" id="manual-refresh" style="margin-left: 10px;">Manual Refresh Stats</button>').insertAfter('.wrap h1');
-            } else {
-                $('.wrap').prepend('<button class="button" id="manual-refresh" style="margin: 10px;">Manual Refresh Stats</button>');
-            }
-        }
-        
-        // Try to add debug button
-        if ($('#debug-ajax').length === 0) {
-            if ($('#manual-refresh').length > 0) {
-                $('<button class="button" id="debug-ajax" style="margin-left: 10px;">Debug AJAX</button>').insertAfter('#manual-refresh');
-            } else {
-                $('.wrap').prepend('<button class="button" id="debug-ajax" style="margin: 10px;">Debug AJAX</button>');
-            }
-        }
-        
-        // Bind events
-        $('#manual-refresh').on('click', function() {
-            console.log('Manual refresh clicked');
-            loadDashboardData();
-            loadRecentDetections();
-        });
-        
-        $('#debug-ajax').on('click', debugContentGuardAJAX);
-        
-        console.log('Buttons added:', {
-            'manual-refresh': $('#manual-refresh').length,
-            'debug-ajax': $('#debug-ajax').length
-        });
-    }, 100);
-    
-    // **MAIN INITIALIZATION**
-    // Only initialize if we're on the main dashboard
-    if ($('#contentguard-dashboard').length > 0 || $('.contentguard-admin').length > 0) {
-        console.log('Initializing ContentGuard dashboard...');
-        console.log('Found elements:', {
-            'recent-detections': $('#recent-detections').length,
-            'total-bots': $('#total-bots').length,
-            'activity-chart': $('#activity-chart').length
-        });
-        
-        // Load data immediately with a small delay to ensure DOM is ready
-        setTimeout(function() {
-            console.log('Starting data load...');
-            loadDashboardData();
-            loadRecentDetections();
-        }, 500);
-        
-        // Refresh data every 30 seconds
-        setInterval(function() {
-            loadDashboardData();
-            loadRecentDetections();
-        }, 30000);
-    }
-    
-    // Final debug info
-    console.log('ContentGuard admin JavaScript loaded successfully');
-    console.log('Page ready state:', document.readyState);
+    // Start initialization
+    initializeContentGuard();
 });

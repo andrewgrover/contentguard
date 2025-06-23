@@ -223,8 +223,24 @@ class ContentGuardValueCalculator {
                           $confidence_multiplier * 
                           $risk_multiplier;
         
-        // Cap maximum value to prevent unrealistic estimates
-        $estimated_value = min($estimated_value, 2500.00);
+        // REMOVED: Cap maximum value - let it calculate realistic values
+        // $estimated_value = min($estimated_value, 2500.00);
+        
+        // Apply reasonable bounds instead
+        $estimated_value = max(0.50, $estimated_value); // Minimum 50 cents
+        $estimated_value = min($estimated_value, 500.00); // Maximum $500 per access
+        
+        // Debug logging
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log("ContentGuard Value Calculation Debug:");
+            error_log("  Company: $company");
+            error_log("  Base Value: $base_value");
+            error_log("  Characteristic Multiplier: $characteristic_multiplier");
+            error_log("  Market Multiplier: $market_multiplier");
+            error_log("  Confidence Multiplier: $confidence_multiplier");
+            error_log("  Risk Multiplier: $risk_multiplier");
+            error_log("  Final Estimated Value: $estimated_value");
+        }
         
         return [
             'estimated_value' => round($estimated_value, 2),

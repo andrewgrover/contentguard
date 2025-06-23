@@ -75,20 +75,79 @@ class ContentGuard_AJAX {
             return;
         }
         
-        // Get detections from last 30 days for portfolio analysis
+        // Get raw detections - DON'T pull old estimated_value from database
+        // This matches exactly what ajax_get_detections() does
         $detections = $wpdb->get_results($wpdb->prepare(
-            "SELECT * FROM $table_name WHERE detected_at > DATE_SUB(NOW(), INTERVAL 30 DAY) ORDER BY detected_at DESC"
+            "SELECT id, user_agent, ip_address, request_uri, bot_type, company, risk_level, confidence, commercial_risk, detected_at
+             FROM $table_name 
+             WHERE detected_at > DATE_SUB(NOW(), INTERVAL 30 DAY) 
+             ORDER BY detected_at DESC"
         ), ARRAY_A);
         
-        // Calculate portfolio value using our value calculator
-        $portfolio_analysis = $this->value_calculator->calculatePortfolioValue($detections);
+        error_log("ContentGuard Stats: Retrieved " . count($detections) . " raw detections for portfolio calculation");
         
-        // Get basic stats
-        $total_bots = count($detections);
-        $commercial_bots = count(array_filter($detections, function($d) { return $d['commercial_risk']; }));
-        $top_company = $wpdb->get_var("SELECT company FROM $table_name WHERE detected_at > DATE_SUB(NOW(), INTERVAL 30 DAY) GROUP BY company ORDER BY COUNT(*) DESC LIMIT 1") ?: 'None detected';
+        // Calculate enhanced valuations for each detection - SAME AS DETECTIONS METHOD
+        $enhanced_detections = [];
         
-        // Daily activity (last 7 days)
+        foreach ($detections as $detection) {
+            try {
+                // Analyze content using current enhanced system
+                $content_metadata = $this->content_analyzer->analyzeContent($detection['request_uri']);
+                
+                // Calculate value using current enhanced calculator
+                $detection_data = [
+                    'company' => $detection['company'],
+                    'bot_type' => $detection['bot_type'],
+                    'request_uri' => $detection['request_uri'],
+                    'risk_level' => $detection['risk_level'],
+                    'confidence' => intval($detection['confidence'] ?? 50),
+                    'commercial_risk' => $detection['commercial_risk']
+                ];
+                
+                $valuation = $this->value_calculator->calculateContentValue($detection_data, $content_metadata);
+                
+                // Add enhanced data to detection
+                $detection['estimated_value'] = $valuation['estimated_value'];
+                $detection['content_type'] = $content_metadata['content_type'] ?? 'article';
+                $detection['content_quality'] = $content_metadata['quality_score'] ?? 50;
+                $detection['licensing_potential'] = $valuation['licensing_potential']['potential'];
+                
+                $enhanced_detections[] = $detection;
+                
+                error_log("ContentGuard Stats: Calculated fresh value " . $valuation['estimated_value'] . " for detection " . $detection['id']);
+                
+            } catch (Exception $e) {
+                error_log("ContentGuard Stats: Error calculating value for detection " . $detection['id'] . ": " . $e->getMessage());
+                
+                // Use fallback but make it obvious
+                $detection['estimated_value'] = 0.00;
+                $detection['content_type'] = 'article';
+                $detection['content_quality'] = 50;
+                $detection['licensing_potential'] = 'low';
+                
+                $enhanced_detections[] = $detection;
+            }
+        }
+        
+        // NOW calculate portfolio analysis using the enhanced detections
+        $portfolio_analysis = $this->value_calculator->calculatePortfolioValue($enhanced_detections);
+        
+        error_log("ContentGuard Stats: Portfolio analysis total value: " . $portfolio_analysis['total_portfolio_value']);
+        
+        // Get basic stats from enhanced detections
+        $total_bots = count($enhanced_detections);
+        $commercial_bots = count(array_filter($enhanced_detections, function($d) { return $d['commercial_risk']; }));
+        
+        // Get top company from enhanced detections
+        $company_counts = [];
+        foreach ($enhanced_detections as $detection) {
+            $company = $detection['company'] ?? 'Unknown';
+            $company_counts[$company] = ($company_counts[$company] ?? 0) + 1;
+        }
+        arsort($company_counts);
+        $top_company = !empty($company_counts) ? array_key_first($company_counts) : 'None detected';
+        
+        // Daily activity (last 7 days) - this can stay the same
         $daily_activity = [];
         for ($i = 6; $i >= 0; $i--) {
             $date = date('Y-m-d', strtotime("-$i days"));
@@ -99,32 +158,30 @@ class ContentGuard_AJAX {
             $daily_activity[] = ['date' => $date, 'count' => (int)$count];
         }
         
-        // Company breakdown with values - check if estimated_value column exists
+        // Company breakdown with FRESH VALUES
         $company_breakdown = [];
+        $company_values = [];
         
-        // Check if estimated_value column exists in the table
-        $columns = $wpdb->get_results("SHOW COLUMNS FROM $table_name LIKE 'estimated_value'");
-        $has_estimated_value = !empty($columns);
+        foreach ($enhanced_detections as $detection) {
+            $company = $detection['company'];
+            if (!isset($company_values[$company])) {
+                $company_values[$company] = ['count' => 0, 'total_value' => 0];
+            }
+            $company_values[$company]['count']++;
+            $company_values[$company]['total_value'] += $detection['estimated_value'];
+        }
         
-        if ($has_estimated_value) {
-            $companies = $wpdb->get_results("SELECT company, COUNT(*) as count, SUM(estimated_value) as total_value FROM $table_name WHERE detected_at > DATE_SUB(NOW(), INTERVAL 30 DAY) GROUP BY company ORDER BY total_value DESC");
-            foreach ($companies as $company) {
-                $company_breakdown[] = [
-                    'company' => $company->company,
-                    'count' => (int)$company->count,
-                    'estimated_value' => (float)$company->total_value
-                ];
-            }
-        } else {
-            // Fallback: just get company counts without estimated_value
-            $companies = $wpdb->get_results("SELECT company, COUNT(*) as count FROM $table_name WHERE detected_at > DATE_SUB(NOW(), INTERVAL 30 DAY) GROUP BY company ORDER BY count DESC");
-            foreach ($companies as $company) {
-                $company_breakdown[] = [
-                    'company' => $company->company,
-                    'count' => (int)$company->count,
-                    'estimated_value' => 0
-                ];
-            }
+        // Sort by total value (descending)
+        uasort($company_values, function($a, $b) {
+            return $b['total_value'] <=> $a['total_value'];
+        });
+        
+        foreach ($company_values as $company => $data) {
+            $company_breakdown[] = [
+                'company' => $company,
+                'count' => $data['count'],
+                'estimated_value' => $data['total_value']
+            ];
         }
         
         wp_send_json_success([
@@ -137,7 +194,12 @@ class ContentGuard_AJAX {
             'company_breakdown' => $company_breakdown,
             'licensing_opportunities' => count($portfolio_analysis['recommendations'] ?? []),
             'high_value_detections' => $portfolio_analysis['high_value_content_count'],
-            'average_value_per_detection' => $portfolio_analysis['average_value_per_access']
+            'average_value_per_detection' => $portfolio_analysis['average_value_per_access'],
+            '_debug' => [
+                'method' => 'fresh_calculation',
+                'detections_processed' => count($enhanced_detections),
+                'calculation_source' => 'enhanced_realtime'
+            ]
         ]);
     }
 
@@ -169,34 +231,17 @@ class ContentGuard_AJAX {
         $limit = intval($_POST['limit'] ?? 20);
         $offset = intval($_POST['offset'] ?? 0);
         
-        // Check if estimated_value column exists
-        $columns = $wpdb->get_results("SHOW COLUMNS FROM $table_name LIKE 'estimated_value'");
-        $has_estimated_value = !empty($columns);
+        // Get raw detections - DON'T pull old estimated_value from database
+        $detections = $wpdb->get_results($wpdb->prepare(
+            "SELECT id, user_agent, ip_address, request_uri, bot_type, company, risk_level, confidence, commercial_risk, detected_at
+             FROM $table_name 
+             WHERE detected_at > DATE_SUB(NOW(), INTERVAL 30 DAY) 
+             ORDER BY detected_at DESC LIMIT %d OFFSET %d",
+            $limit, $offset
+        ), ARRAY_A);
         
-        if ($has_estimated_value) {
-            $detections = $wpdb->get_results($wpdb->prepare(
-                "SELECT *, 
-                 COALESCE(estimated_value, 0) as estimated_value,
-                 COALESCE(content_type, 'article') as content_type,
-                 COALESCE(licensing_potential, 'low') as licensing_potential
-                 FROM $table_name 
-                 WHERE detected_at > DATE_SUB(NOW(), INTERVAL 30 DAY) 
-                 ORDER BY detected_at DESC LIMIT %d OFFSET %d",
-                $limit, $offset
-            ), ARRAY_A);
-        } else {
-            // Fallback for tables without enhanced columns
-            $detections = $wpdb->get_results($wpdb->prepare(
-                "SELECT *,
-                 0 as estimated_value,
-                 'article' as content_type,
-                 'low' as licensing_potential
-                 FROM $table_name 
-                 WHERE detected_at > DATE_SUB(NOW(), INTERVAL 30 DAY) 
-                 ORDER BY detected_at DESC LIMIT %d OFFSET %d",
-                $limit, $offset
-            ), ARRAY_A);
-        }
+        // DEBUG: Log what we got from database
+        error_log("ContentGuard AJAX: Retrieved " . count($detections) . " detections from database");
         
         // If no detections found, provide a helpful message
         if (empty($detections)) {
@@ -213,7 +258,76 @@ class ContentGuard_AJAX {
             return;
         }
         
-        wp_send_json_success($detections);
+        // Calculate enhanced valuations for each detection using current system
+        $enhanced_detections = [];
+        
+        foreach ($detections as $detection) {
+            try {
+                error_log("ContentGuard AJAX: Processing detection ID " . $detection['id'] . " for company " . $detection['company']);
+                
+                // Check if we have the required classes
+                if (!$this->content_analyzer || !$this->value_calculator) {
+                    error_log("ContentGuard AJAX: Missing calculator classes!");
+                    throw new Exception("Value calculator not available");
+                }
+                
+                // Analyze content using current enhanced system
+                $content_metadata = $this->content_analyzer->analyzeContent($detection['request_uri']);
+                error_log("ContentGuard AJAX: Content analysis completed for " . $detection['request_uri']);
+                
+                // Calculate value using current enhanced calculator
+                $detection_data = [
+                    'company' => $detection['company'],
+                    'bot_type' => $detection['bot_type'],
+                    'request_uri' => $detection['request_uri'],
+                    'risk_level' => $detection['risk_level'],
+                    'confidence' => intval($detection['confidence'] ?? 50),
+                    'commercial_risk' => $detection['commercial_risk']
+                ];
+                
+                $valuation = $this->value_calculator->calculateContentValue($detection_data, $content_metadata);
+                error_log("ContentGuard AJAX: Calculated value " . $valuation['estimated_value'] . " for detection " . $detection['id']);
+                
+                // Add enhanced data to detection (OVERRIDE any old database values)
+                $detection['estimated_value'] = $valuation['estimated_value'];
+                $detection['content_type'] = $content_metadata['content_type'] ?? 'article';
+                $detection['content_quality'] = $content_metadata['quality_score'] ?? 50;
+                $detection['licensing_potential'] = $valuation['licensing_potential']['potential'];
+                
+                // Add debug info that will be visible in browser console
+                $detection['_debug'] = [
+                    'calculated_fresh' => true,
+                    'original_value' => 'CALCULATED_FRESH',
+                    'new_value' => $valuation['estimated_value'],
+                    'company' => $detection['company'],
+                    'content_type' => $content_metadata['content_type'] ?? 'article',
+                    'calculation_method' => 'enhanced_2024'
+                ];
+                
+                $enhanced_detections[] = $detection;
+                
+            } catch (Exception $e) {
+                error_log("ContentGuard AJAX: Error calculating value for detection " . $detection['id'] . ": " . $e->getMessage());
+                
+                // If valuation fails, use fallback values but make them obvious
+                $detection['estimated_value'] = 99.99; // Obvious fallback value
+                $detection['content_type'] = 'article';
+                $detection['content_quality'] = 50;
+                $detection['licensing_potential'] = 'medium';
+                $detection['_debug'] = [
+                    'calculated_fresh' => false,
+                    'error' => $e->getMessage(),
+                    'fallback_used' => true
+                ];
+                
+                $enhanced_detections[] = $detection;
+            }
+        }
+        
+        error_log("ContentGuard AJAX: Sending " . count($enhanced_detections) . " enhanced detections to frontend");
+        
+        // Send enhanced detections
+        wp_send_json_success($enhanced_detections);
     }
 
     public function ajax_get_valuation_details() {

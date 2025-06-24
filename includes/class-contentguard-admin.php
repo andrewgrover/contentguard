@@ -44,7 +44,8 @@ class Plontis_Admin {
         }
         
         $plugin_url = PLONTIS_PLUGIN_URL;
-        $version = defined('PLONTIS_VERSION') ? PLONTIS_VERSION : '2.0.0';
+        $version = defined('PLONTIS_VERSION') ? PLONTIS_VERSION : '1.0.3';
+        $css_version = $version . '-' . time(); // This forces reload
         
         // Build file paths
         $admin_js_url = $plugin_url . 'admin.js';
@@ -54,6 +55,13 @@ class Plontis_Admin {
         // Check if files exist
         $admin_js_path = PLONTIS_PLUGIN_PATH . 'admin.js';
         $admin_css_path = PLONTIS_PLUGIN_PATH . 'admin.css';
+
+        if (file_exists($admin_css_path)) {
+            wp_enqueue_style('plontis-admin', $admin_css_url, [], $css_version);
+            error_log("Plontis: admin.css enqueued successfully with version: " . $css_version);
+        } else {
+            error_log("Plontis: admin.css file not found at: " . $admin_css_path);
+        }
         
         error_log("Plontis: Checking files...");
         error_log("  admin.js exists: " . (file_exists($admin_js_path) ? 'YES' : 'NO') . " at $admin_js_path");
@@ -174,11 +182,14 @@ class Plontis_Admin {
         $portfolio_analysis = $this->value_calculator->calculatePortfolioValue($enhanced_detections);
         
         ?>
-        <div class="wrap plontis-admin" id="plontis-dashboard">
-            <h1>
-                <span class="dashicons dashicons-shield-alt"></span>
-                Plontis - AI Bot Detection v<?php echo PLONTIS_VERSION; ?>
-            </h1>
+            <div class="wrap plontis-admin" id="plontis-dashboard">
+                        <div class="plontis-header">
+                <div class="plontis-logo">
+                    <div class="plontis-icon"></div>
+                    <h1 class="plontis-title">PLONTIS</h1>
+                </div>
+                <span class="plontis-subtitle">AI Bot Detection</span>
+            </div>
             
             <div class="plontis-stats-grid">
                 <div class="plontis-stat-card">
@@ -230,7 +241,7 @@ class Plontis_Admin {
                             <th scope="row">User Agent String</th>
                             <td>
                                 <input type="text" name="test_user_agent" class="regular-text" 
-                                    placeholder="Mozilla/5.0 (compatible; GPTBot/1.0; +https://openai.com/gptbot)" 
+                                    placeholder="GPTBot/1.0" 
                                     style="width: 100%; margin-bottom: 10px;" 
                                     value="<?php echo isset($_POST['test_user_agent']) ? esc_attr($_POST['test_user_agent']) : ''; ?>" />
                                 <br>
@@ -723,7 +734,7 @@ class Plontis_Admin {
                 <a href="<?php echo admin_url('admin.php?page=plontis-valuation'); ?>" class="button">
                     Valuation Report
                 </a>
-                <a href="https://plontis.ai/licensing" target="_blank" class="button button-primary">
+                <a href="https://plontis.com" target="_blank" class="button button-primary">
                     Start Earning
                 </a>
             </p>

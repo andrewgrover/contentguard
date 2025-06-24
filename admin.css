@@ -16,6 +16,98 @@
     font-size: 32px;
 }
 
+.plontis-header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 30px;
+    padding: 20px 0;
+    border-bottom: 2px solid #f0f0f0;
+}
+
+.plontis-logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.plontis-icon {
+    width: 56px;  /* Increased from 48px */
+    height: 56px; /* Increased from 48px */
+    background: linear-gradient(135deg, #dc3545 0%, #fd7e14 100%);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.plontis-icon::before {
+    content: '🛡️';
+    font-size: 28px; /* Increased from 24px */
+    filter: brightness(1.2);
+}
+
+.plontis-icon::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.2) 50%, transparent 70%);
+    animation: shine 3s infinite;
+}
+
+@keyframes shine {
+    0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+    100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+}
+
+.plontis-title {
+    font-size: 48px; 
+    font-weight: 800;
+    background: linear-gradient(135deg, #dc3545 0%, #fd7e14 60%, #ffc107 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -1px;
+    position: relative;
+    text-shadow: 0 2px 4px rgba(220, 53, 69, 0.1);
+    margin: 0;
+    line-height: 1; /* Ensures tight line spacing */
+}
+
+.plontis-subtitle {
+    font-size: 14px;
+    color: #666;
+    font-weight: 500;
+    margin-left: auto;
+    background: #f8f9fa;
+    padding: 6px 12px;
+    border-radius: 20px;
+    border: 1px solid #e9ecef;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .plontis-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    
+    .plontis-title {
+        font-size: 28px;
+    }
+    
+    .plontis-subtitle {
+        margin-left: 0;
+    }
+}
+
 /* Stats Grid */
 .plontis-stats-grid {
     display: grid;

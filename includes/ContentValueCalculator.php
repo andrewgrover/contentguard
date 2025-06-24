@@ -1,6 +1,6 @@
 <?php
 /**
- * ContentGuard Content Value Calculator
+ * Plontis Content Value Calculator
  * Advanced content valuation system based on real-world licensing rates
  * 
  * Based on 2024-2025 research data from:
@@ -16,135 +16,125 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-class ContentGuardValueCalculator {
+class PlontisValueCalculator {
     
     /**
      * Content type multipliers based on market research
      */
     private $content_type_rates = [
-        // High-value content types
+        // More conservative base rates
         'article' => [
-            'base_rate' => 25.00,      // Based on academic article access rates ($20-60)
-            'word_rate' => 0.008,      // $8 per 1000 words for quality content
-            'research_multiplier' => 3.5, // Research articles worth more
-            'news_multiplier' => 2.8,     // News articles valuable for training
-            'evergreen_multiplier' => 2.2 // Evergreen content retains value
+            'base_rate' => 3.00,           // $3 base (was $25)
+            'word_rate' => 0.002,          // $2 per 1000 words (was $8)
+            'research_multiplier' => 2.5,  // Research worth more (was 3.5)
+            'news_multiplier' => 2.0,      // News content (was 2.8)
+            'evergreen_multiplier' => 1.5  // Evergreen content (was 2.2)
         ],
         'image' => [
-            'base_rate' => 145.00,     // Getty Images range $130-$575, using conservative avg
+            'base_rate' => 25.00,          // Keep image rates higher (Getty Images basis)
             'resolution_multiplier' => [
-                'low' => 0.6,          // Web resolution
-                'medium' => 1.0,       // Standard
-                'high' => 1.8,         // Professional quality
-                'vector' => 2.5        // Vector/scalable
+                'low' => 0.6,
+                'medium' => 1.0,
+                'high' => 1.8,
+                'vector' => 2.5
             ],
-            'commercial_multiplier' => 3.2 // Commercial use premium
+            'commercial_multiplier' => 2.0  // Reduced from 3.2
         ],
         'video' => [
-            'base_rate' => 320.00,     // Video typically 2-3x image rates
-            'duration_rate' => 12.50,  // Per minute
+            'base_rate' => 50.00,          // Reduced from $320
+            'duration_rate' => 5.00,       // $5 per minute (was $12.50)
             'quality_multiplier' => [
                 '720p' => 0.8,
                 '1080p' => 1.0,
-                '4k' => 2.4,
-                '8k' => 4.2
+                '4k' => 2.0,               // Reduced from 2.4
+                '8k' => 3.0                // Reduced from 4.2
             ]
         ],
         'audio' => [
-            'base_rate' => 85.00,      // Music licensing rates
-            'duration_rate' => 8.75,   // Per minute
-            'music_multiplier' => 1.8,  // Music vs voice content
-            'voice_multiplier' => 1.2   // Voice content
+            'base_rate' => 15.00,          // Reduced from $85
+            'duration_rate' => 2.00,       // $2 per minute (was $8.75)
+            'music_multiplier' => 1.5,     // Reduced from 1.8
+            'voice_multiplier' => 1.1      // Reduced from 1.2
         ],
         'code' => [
-            'base_rate' => 95.00,      // Code snippets for AI training
-            'line_rate' => 0.35,       // Per line of code
+            'base_rate' => 8.00,           // Reduced from $95
+            'line_rate' => 0.10,           // 10 cents per line (was 35 cents)
             'complexity_multiplier' => [
                 'basic' => 0.7,
                 'intermediate' => 1.0,
-                'advanced' => 2.1,
-                'expert' => 3.8
+                'advanced' => 1.8,         // Reduced from 2.1
+                'expert' => 2.5            // Reduced from 3.8
             ]
         ],
         'data' => [
-            'base_rate' => 15.00,      // Structured data
-            'record_rate' => 0.05,     // Per data record/row
-            'quality_multiplier' => 2.4 // Clean, structured data premium
+            'base_rate' => 2.00,           // Reduced from $15
+            'record_rate' => 0.01,         // 1 cent per record (was 5 cents)
+            'quality_multiplier' => 1.5    // Reduced from 2.4
         ]
     ];
 
     /**
-     * Company risk and value multipliers based on commercial use
+     * More realistic company multipliers
      */
     private $company_multipliers = [
-        // Tier 1: Major commercial AI companies
+        // Tier 1: Major AI companies (but more realistic)
         'OpenAI' => [
-            'multiplier' => 4.2,
-            'base_value' => 45.00,
+            'multiplier' => 2.5,           // Reduced from 4.2
+            'base_value' => 8.00,          // Reduced from $45
             'reason' => 'ChatGPT commercial leader, premium licensing rates'
         ],
         'Anthropic' => [
-            'multiplier' => 3.8,
-            'base_value' => 42.00,
+            'multiplier' => 2.2,           // Reduced from 3.8
+            'base_value' => 7.00,          // Reduced from $42
             'reason' => 'Claude enterprise focus, high-value use cases'
         ],
         'Google' => [
-            'multiplier' => 4.5,
-            'base_value' => 48.00,
+            'multiplier' => 2.8,           // Reduced from 4.5
+            'base_value' => 9.00,          // Reduced from $48
             'reason' => 'Largest search/AI revenue, Bard/Gemini training'
         ],
         'Meta' => [
-            'multiplier' => 3.2,
-            'base_value' => 35.00,
+            'multiplier' => 1.8,           // Reduced from 3.2
+            'base_value' => 5.00,          // Reduced from $35
             'reason' => 'Llama models, social media integration'
         ],
         
-        // Tier 2: Medium commercial risk
+        // Tier 2: Medium commercial risk (more realistic)
         'Perplexity' => [
-            'multiplier' => 2.8,
-            'base_value' => 28.00,
+            'multiplier' => 1.5,           // Reduced from 2.8
+            'base_value' => 4.00,          // Reduced from $28
             'reason' => 'AI search engine, growing user base'
         ],
         'Apple' => [
-            'multiplier' => 3.5,
-            'base_value' => 38.00,
+            'multiplier' => 2.0,           // Reduced from 3.5
+            'base_value' => 6.00,          // Reduced from $38
             'reason' => 'iOS AI features, premium market'
         ],
         'Amazon' => [
-            'multiplier' => 3.1,
-            'base_value' => 32.00,
+            'multiplier' => 1.6,           // Reduced from 3.1
+            'base_value' => 5.00,          // Reduced from $32
             'reason' => 'Alexa, AWS AI services'
-        ],
-        'Cohere' => [
-            'multiplier' => 2.5,
-            'base_value' => 24.00,
-            'reason' => 'Enterprise AI, B2B focus'
-        ],
-        'ByteDance' => [
-            'multiplier' => 2.9,
-            'base_value' => 26.00,
-            'reason' => 'TikTok AI, global reach'
-        ],
-        
-        // Tier 3: Research/Academic (lower commercial risk)
-        'Common Crawl' => [
-            'multiplier' => 1.2,
-            'base_value' => 8.00,
-            'reason' => 'Non-profit, research dataset'
-        ],
-        'Academic' => [
-            'multiplier' => 0.8,
-            'base_value' => 5.00,
-            'reason' => 'Research use, limited commercial value'
         ],
         
         // Default for unknown companies
         'Unknown' => [
-            'multiplier' => 1.5,
-            'base_value' => 15.00,
+            'multiplier' => 1.2,           // Reduced from 1.5
+            'base_value' => 2.00,          // Reduced from $15
             'reason' => 'Unknown commercial intent'
         ]
     ];
+
+    /**
+     * More realistic market factors
+     */
+    private $market_factors = [
+        'ai_market_growth' => 1.05,        // 5% growth factor (was 15%)
+        'content_scarcity' => 1.03,        // 3% scarcity premium (was 8%)
+        'legal_risk' => 1.04,              // 4% legal risk (was 12%)
+        'competition' => 1.02,             // 2% competition factor (was 6%)
+        'regulatory' => 1.01               // 1% regulatory (was 4%)
+    ];
+
 
     /**
      * Content characteristics that affect value
@@ -175,17 +165,6 @@ class ContentGuardValueCalculator {
             'long' => 1.4,           // 2000-5000 words
             'comprehensive' => 1.8    // 5000+ words
         ]
-    ];
-
-    /**
-     * Market factors affecting overall valuation
-     */
-    private $market_factors = [
-        'ai_market_growth' => 1.15,    // 15% annual AI market growth
-        'content_scarcity' => 1.08,    // Quality content becoming scarcer
-        'legal_risk' => 1.12,          // Legal scrutiny increasing value
-        'competition' => 1.06,         // Competition for training data
-        'regulatory' => 1.04           // Regulatory compliance costs
     ];
 
     /**
@@ -223,16 +202,27 @@ class ContentGuardValueCalculator {
                           $confidence_multiplier * 
                           $risk_multiplier;
         
-        // REMOVED: Cap maximum value - let it calculate realistic values
-        // $estimated_value = min($estimated_value, 2500.00);
+        $estimated_value = max(0.25, $estimated_value);  // Minimum 25 cents
+        $estimated_value = min($estimated_value, 150.00); // Maximum $150 (was $500)
         
-        // Apply reasonable bounds instead
-        $estimated_value = max(0.50, $estimated_value); // Minimum 50 cents
-        $estimated_value = min($estimated_value, 500.00); // Maximum $500 per access
+        // Additional reality check for simple content
+        $content_type = $content_metadata['content_type'] ?? 'article';
+        $word_count = $content_metadata['word_count'] ?? 500;
+        
+        // Cap simple blog posts
+        if ($content_type === 'article' && $word_count < 1000) {
+            $estimated_value = min($estimated_value, 25.00); // Max $25 for short posts
+        }
+        
+        // Cap by content quality
+        $quality_score = $content_metadata['quality_score'] ?? 50;
+        if ($quality_score < 60) {
+            $estimated_value = min($estimated_value, 15.00); // Max $15 for low quality
+        }
         
         // Debug logging
         if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log("ContentGuard Value Calculation Debug:");
+            error_log("Plontis Value Calculation Debug:");
             error_log("  Company: $company");
             error_log("  Base Value: $base_value");
             error_log("  Characteristic Multiplier: $characteristic_multiplier");
@@ -566,7 +556,7 @@ class ContentGuardValueCalculator {
             $recommendations[] = 'Significant content value - Document all AI bot activity for licensing negotiations';
         }
         
-        $recommendations[] = 'Join ContentGuard platform to connect with AI companies seeking licensed content';
+        $recommendations[] = 'Join Plontis platform to connect with AI companies seeking licensed content';
         
         return $recommendations;
     }

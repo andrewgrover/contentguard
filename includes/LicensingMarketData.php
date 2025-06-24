@@ -1,6 +1,6 @@
 <?php
 /**
- * ContentGuard Licensing Market Data
+ * Plontis Licensing Market Data
  * Comprehensive market research data for accurate content valuation
  * 
  * Data sources:
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-class ContentGuardLicensingMarketData {
+class PlontisLicensingMarketData {
     
     /**
      * Getty Images pricing data (2024-2025)

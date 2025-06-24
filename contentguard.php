@@ -1,12 +1,12 @@
 <?php
 /**
- * Plugin Name: ContentGuard - AI Bot Detection (Enhanced)
- * Plugin URI: https://contentguard.ai
+ * Plugin Name: Plontis - AI Bot Detection (Enhanced)
+ * Plugin URI: https://plontis.ai
  * Description: Detect and track AI bots scraping your content with industry-accurate valuation.
  * Version: 2.0.0
- * Author: ContentGuard
+ * Author: Plontis
  * License: GPL v2 or later
- * Text Domain: contentguard
+ * Text Domain: plontis
  */
 
 // Prevent direct access
@@ -15,21 +15,21 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('CONTENTGUARD_VERSION', '2.0.0');
-define('CONTENTGUARD_PLUGIN_URL', plugin_dir_url(__FILE__));
-define('CONTENTGUARD_PLUGIN_PATH', plugin_dir_path(__FILE__));
+define('PLONTIS_VERSION', '2.0.0');
+define('PLONTIS_PLUGIN_URL', plugin_dir_url(__FILE__));
+define('PLONTIS_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
 // Force debug logging
-error_log("=== ContentGuard Debug: Starting plugin load ===");
+error_log("=== Plontis Debug: Starting plugin load ===");
 
 // Function to safely test and include files
-function contentguard_test_and_include($file) {
-    $file_path = CONTENTGUARD_PLUGIN_PATH . $file;
+function plontis_test_and_include($file) {
+    $file_path = PLONTIS_PLUGIN_PATH . $file;
     
-    error_log("ContentGuard: Testing file $file");
+    error_log("Plontis: Testing file $file");
     
     if (!file_exists($file_path)) {
-        error_log("ContentGuard: File MISSING: $file_path");
+        error_log("Plontis: File MISSING: $file_path");
         return false;
     }
     
@@ -38,36 +38,36 @@ function contentguard_test_and_include($file) {
     
     // Check for opening PHP tag
     if (strpos($content, '<?php') === false) {
-        error_log("ContentGuard: File $file missing opening <?php tag");
+        error_log("Plontis: File $file missing opening <?php tag");
         return false;
     }
     
     // Check for problematic closing tag
     if (substr(trim($content), -2) === '?>') {
-        error_log("ContentGuard: WARNING - File $file has closing ?> tag (should be removed)");
+        error_log("Plontis: WARNING - File $file has closing ?> tag (should be removed)");
     }
     
     // Check for class definitions to avoid redeclaration
     if (preg_match('/class\s+(\w+)/', $content, $matches)) {
         $class_name = $matches[1];
         if (class_exists($class_name)) {
-            error_log("ContentGuard: ERROR - Class $class_name already exists (from $file)");
+            error_log("Plontis: ERROR - Class $class_name already exists (from $file)");
             return false;
         }
     }
     
     try {
         require_once $file_path;
-        error_log("ContentGuard: Successfully included $file");
+        error_log("Plontis: Successfully included $file");
         return true;
     } catch (ParseError $e) {
-        error_log("ContentGuard: PARSE ERROR in $file: " . $e->getMessage());
+        error_log("Plontis: PARSE ERROR in $file: " . $e->getMessage());
         return false;
     } catch (Error $e) {
-        error_log("ContentGuard: FATAL ERROR in $file: " . $e->getMessage());
+        error_log("Plontis: FATAL ERROR in $file: " . $e->getMessage());
         return false;
     } catch (Exception $e) {
-        error_log("ContentGuard: EXCEPTION in $file: " . $e->getMessage());
+        error_log("Plontis: EXCEPTION in $file: " . $e->getMessage());
         return false;
     }
 }
@@ -83,37 +83,37 @@ $files_to_test = [
     'includes/ContentValueIntegration.php',
     
     // WordPress classes
-    'includes/class-contentguard-core.php',
-    'includes/class-contentguard-admin.php',
-    'includes/class-contentguard-ajax.php',
-    'includes/class-contentguard-api.php',
-    'includes/class-contentguard-widgets.php',
-    'includes/class-contentguard-cli.php'
+    'includes/class-plontis-core.php',
+    'includes/class-plontis-admin.php',
+    'includes/class-plontis-ajax.php',
+    'includes/class-plontis-api.php',
+    'includes/class-plontis-widgets.php',
+    'includes/class-plontis-cli.php'
 ];
 
 $successful_includes = [];
 $failed_includes = [];
 
 foreach ($files_to_test as $file) {
-    if (contentguard_test_and_include($file)) {
+    if (plontis_test_and_include($file)) {
         $successful_includes[] = $file;
     } else {
         $failed_includes[] = $file;
-        error_log("ContentGuard: STOPPING - Failed to include $file");
+        error_log("Plontis: STOPPING - Failed to include $file");
         break; // Stop at first failure
     }
 }
 
-error_log("ContentGuard: Successful includes: " . implode(', ', $successful_includes));
+error_log("Plontis: Successful includes: " . implode(', ', $successful_includes));
 if (!empty($failed_includes)) {
-    error_log("ContentGuard: Failed includes: " . implode(', ', $failed_includes));
+    error_log("Plontis: Failed includes: " . implode(', ', $failed_includes));
 }
 
 // Only initialize if we have the minimum required files
-if (in_array('includes/class-contentguard-core.php', $successful_includes) && 
-    in_array('includes/class-contentguard-admin.php', $successful_includes)) {
+if (in_array('includes/class-plontis-core.php', $successful_includes) && 
+    in_array('includes/class-plontis-admin.php', $successful_includes)) {
     
-    class ContentGuardPlugin {
+    class PlontisPlugin {
         
         private $core;
         private $admin;
@@ -129,45 +129,45 @@ if (in_array('includes/class-contentguard-core.php', $successful_includes) &&
 
         public function init() {
             try {
-                error_log("ContentGuard: Initializing plugin components");
+                error_log("Plontis: Initializing plugin components");
                 
                 // Initialize only what we have
-                if (class_exists('ContentGuard_Core')) {
-                    $this->core = new ContentGuard_Core();
+                if (class_exists('Plontis_Core')) {
+                    $this->core = new Plontis_Core();
                     $this->core->init();
-                    error_log("ContentGuard: Core initialized");
+                    error_log("Plontis: Core initialized");
                 }
                 
-                if (class_exists('ContentGuard_Admin')) {
-                    $this->admin = new ContentGuard_Admin();
+                if (class_exists('Plontis_Admin')) {
+                    $this->admin = new Plontis_Admin();
                     $this->admin->init();
-                    error_log("ContentGuard: Admin initialized");
+                    error_log("Plontis: Admin initialized");
                 }
                 
-                if (class_exists('ContentGuard_AJAX')) {
-                    $this->ajax = new ContentGuard_AJAX();
+                if (class_exists('Plontis_AJAX')) {
+                    $this->ajax = new Plontis_AJAX();
                     $this->ajax->init();
-                    error_log("ContentGuard: AJAX initialized");
+                    error_log("Plontis: AJAX initialized");
                 }
                 
-                if (class_exists('ContentGuard_API')) {
-                    $this->api = new ContentGuard_API();
+                if (class_exists('Plontis_API')) {
+                    $this->api = new Plontis_API();
                     $this->api->init();
-                    error_log("ContentGuard: API initialized");
+                    error_log("Plontis: API initialized");
                 }
                 
-                if (class_exists('ContentGuard_Widgets')) {
-                    $this->widgets = new ContentGuard_Widgets();
+                if (class_exists('Plontis_Widgets')) {
+                    $this->widgets = new Plontis_Widgets();
                     $this->widgets->init();
-                    error_log("ContentGuard: Widgets initialized");
+                    error_log("Plontis: Widgets initialized");
                 }
                 
-                error_log("ContentGuard: Plugin initialization completed successfully");
+                error_log("Plontis: Plugin initialization completed successfully");
                 
             } catch (Exception $e) {
-                error_log("ContentGuard: Initialization error: " . $e->getMessage());
+                error_log("Plontis: Initialization error: " . $e->getMessage());
                 add_action('admin_notices', function() use ($e) {
-                    echo '<div class="notice notice-error"><p><strong>ContentGuard Initialization Error:</strong> ' . esc_html($e->getMessage()) . '</p></div>';
+                    echo '<div class="notice notice-error"><p><strong>Plontis Initialization Error:</strong> ' . esc_html($e->getMessage()) . '</p></div>';
                 });
             }
         }
@@ -175,7 +175,7 @@ if (in_array('includes/class-contentguard-core.php', $successful_includes) &&
         public function activate() {
             // Simple activation - create table
             global $wpdb;
-            $table_name = $wpdb->prefix . 'contentguard_detections';
+            $table_name = $wpdb->prefix . 'plontis_detections';
             $charset_collate = $wpdb->get_charset_collate();
 
             $sql = "CREATE TABLE IF NOT EXISTS $table_name (
@@ -205,8 +205,8 @@ if (in_array('includes/class-contentguard-core.php', $successful_includes) &&
             
             // Add some sample data if table is empty
             $count = $wpdb->get_var("SELECT COUNT(*) FROM $table_name");
-            if ($count == 0 && class_exists('ContentGuard_Core')) {
-                $core = new ContentGuard_Core();
+            if ($count == 0 && class_exists('Plontis_Core')) {
+                $core = new Plontis_Core();
                 if (method_exists($core, 'add_enhanced_sample_data')) {
                     $core->add_enhanced_sample_data();
                 }
@@ -214,19 +214,19 @@ if (in_array('includes/class-contentguard-core.php', $successful_includes) &&
         }
 
         public function deactivate() {
-            wp_clear_scheduled_hook('contentguard_cleanup_logs');
+            wp_clear_scheduled_hook('plontis_cleanup_logs');
         }
     }
 
     // Initialize the plugin
-    new ContentGuardPlugin();
+    new PlontisPlugin();
     
 } else {
-    error_log("ContentGuard: Cannot initialize - missing required files");
+    error_log("Plontis: Cannot initialize - missing required files");
     add_action('admin_notices', function() {
-        echo '<div class="notice notice-error"><p><strong>ContentGuard:</strong> Cannot initialize due to missing required files. Check debug log for details.</p></div>';
+        echo '<div class="notice notice-error"><p><strong>Plontis:</strong> Cannot initialize due to missing required files. Check debug log for details.</p></div>';
     });
 }
 
-error_log("=== ContentGuard Debug: Plugin load completed ===");
+error_log("=== Plontis Debug: Plugin load completed ===");
 ?>

@@ -1,7 +1,7 @@
 <?php
 /**
- * ContentGuard CLI Commands
- * WordPress CLI commands for ContentGuard
+ * Plontis CLI Commands
+ * WordPress CLI commands for Plontis
  */
 
 // Prevent direct access
@@ -10,19 +10,19 @@ if (!defined('ABSPATH')) {
 }
 
 /**
- * WordPress CLI commands for ContentGuard
+ * WordPress CLI commands for Plontis
  */
 if (defined('WP_CLI') && WP_CLI) {
-    class ContentGuard_CLI_Commands {
+    class Plontis_CLI_Commands {
         
         private $value_calculator;
         private $content_analyzer;
         private $core;
         
         public function __construct() {
-            $this->value_calculator = new ContentGuardValueCalculator();
-            $this->content_analyzer = new ContentGuardContentAnalyzer();
-            $this->core = new ContentGuard_Core();
+            $this->value_calculator = new PlontisValueCalculator();
+            $this->content_analyzer = new PlontisContentAnalyzer();
+            $this->core = new Plontis_Core();
         }
         
         /**
@@ -38,11 +38,11 @@ if (defined('WP_CLI') && WP_CLI) {
          * 
          * ## EXAMPLES
          * 
-         *     wp contentguard analyze --days=30 --format=table
+         *     wp plontis analyze --days=30 --format=table
          */
         public function analyze($args, $assoc_args) {
             global $wpdb;
-            $table_name = $wpdb->prefix . 'contentguard_detections';
+            $table_name = $wpdb->prefix . 'plontis_detections';
             
             $days = $assoc_args['days'] ?? 30;
             $format = $assoc_args['format'] ?? 'table';
@@ -100,7 +100,7 @@ if (defined('WP_CLI') && WP_CLI) {
          */
         public function cleanup($args, $assoc_args) {
             global $wpdb;
-            $table_name = $wpdb->prefix . 'contentguard_detections';
+            $table_name = $wpdb->prefix . 'plontis_detections';
             
             $days = $assoc_args['days'] ?? 90;
             $dry_run = isset($assoc_args['dry-run']);
@@ -187,7 +187,7 @@ if (defined('WP_CLI') && WP_CLI) {
          */
         public function export($args, $assoc_args) {
             global $wpdb;
-            $table_name = $wpdb->prefix . 'contentguard_detections';
+            $table_name = $wpdb->prefix . 'plontis_detections';
             
             $days = $assoc_args['days'] ?? 30;
             $format = $assoc_args['format'] ?? 'csv';
@@ -247,7 +247,7 @@ if (defined('WP_CLI') && WP_CLI) {
          */
         public function report($args, $assoc_args) {
             global $wpdb;
-            $table_name = $wpdb->prefix . 'contentguard_detections';
+            $table_name = $wpdb->prefix . 'plontis_detections';
             
             $days = $assoc_args['days'] ?? 30;
             $file = $assoc_args['file'] ?? null;
@@ -265,13 +265,13 @@ if (defined('WP_CLI') && WP_CLI) {
             $portfolio_analysis = $this->value_calculator->calculatePortfolioValue($detections);
             
             // Get licensing recommendations
-            $licensing_recommendations = ContentGuardLicensingMarketData::getLicensingRecommendations(
+            $licensing_recommendations = PlontisLicensingMarketData::getLicensingRecommendations(
                 $portfolio_analysis['total_portfolio_value'],
                 ['article', 'image', 'video'],
                 array_keys($portfolio_analysis['top_value_companies'] ?? [])
             );
             
-            $report = "ContentGuard Licensing Report\n";
+            $report = "Plontis Licensing Report\n";
             $report .= "Generated: " . current_time('Y-m-d H:i:s') . "\n";
             $report .= "Period: Last {$days} days\n\n";
             
@@ -331,11 +331,11 @@ if (defined('WP_CLI') && WP_CLI) {
          * Show plugin status
          */
         public function status($args, $assoc_args) {
-            $settings = get_option('contentguard_settings');
+            $settings = get_option('plontis_settings');
             
-            WP_CLI::line("ContentGuard Status:");
+            WP_CLI::line("Plontis Status:");
             WP_CLI::line("==================");
-            WP_CLI::line("Version: " . CONTENTGUARD_VERSION);
+            WP_CLI::line("Version: " . PLONTIS_VERSION);
             WP_CLI::line("Detection Enabled: " . ($settings['enable_detection'] ? 'Yes' : 'No'));
             WP_CLI::line("Notifications Enabled: " . ($settings['enable_notifications'] ? 'Yes' : 'No'));
             WP_CLI::line("Enhanced Valuation: " . ($settings['enhanced_valuation'] ? 'Yes' : 'No'));
@@ -344,13 +344,13 @@ if (defined('WP_CLI') && WP_CLI) {
             
             // Check components
             WP_CLI::line("\nComponent Status:");
-            WP_CLI::line("Value Calculator: " . (class_exists('ContentGuardValueCalculator') ? 'Loaded' : 'Missing'));
-            WP_CLI::line("Content Analyzer: " . (class_exists('ContentGuardContentAnalyzer') ? 'Loaded' : 'Missing'));
-            WP_CLI::line("Market Data: " . (class_exists('ContentGuardLicensingMarketData') ? 'Loaded' : 'Missing'));
+            WP_CLI::line("Value Calculator: " . (class_exists('PlontisValueCalculator') ? 'Loaded' : 'Missing'));
+            WP_CLI::line("Content Analyzer: " . (class_exists('PlontisContentAnalyzer') ? 'Loaded' : 'Missing'));
+            WP_CLI::line("Market Data: " . (class_exists('PlontisLicensingMarketData') ? 'Loaded' : 'Missing'));
             
             // Database status
             global $wpdb;
-            $table_name = $wpdb->prefix . 'contentguard_detections';
+            $table_name = $wpdb->prefix . 'plontis_detections';
             $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") == $table_name;
             WP_CLI::line("Database Table: " . ($table_exists ? 'Exists' : 'Missing'));
             
@@ -363,25 +363,25 @@ if (defined('WP_CLI') && WP_CLI) {
         }
     }
     
-    WP_CLI::add_command('contentguard', 'ContentGuard_CLI_Commands');
+    WP_CLI::add_command('plontis', 'Plontis_CLI_Commands');
 }
 
 /**
  * Enhanced debugging and logging for development
  */
 if (defined('WP_DEBUG') && WP_DEBUG) {
-    function contentguard_debug_log($message, $data = null) {
-        $log_message = '[ContentGuard Enhanced] ' . $message;
+    function plontis_debug_log($message, $data = null) {
+        $log_message = '[Plontis Enhanced] ' . $message;
         if ($data) {
             $log_message .= ' | Data: ' . json_encode($data);
         }
         error_log($log_message);
     }
     
-    function contentguard_test_enhanced_system() {
+    function plontis_test_enhanced_system() {
         try {
-            $value_calculator = new ContentGuardValueCalculator();
-            $content_analyzer = new ContentGuardContentAnalyzer();
+            $value_calculator = new PlontisValueCalculator();
+            $content_analyzer = new PlontisContentAnalyzer();
             
             $test_cases = [
                 [
@@ -422,7 +422,7 @@ if (defined('WP_DEBUG') && WP_DEBUG) {
             
             foreach ($test_cases as $test) {
                 $valuation = $value_calculator->calculateContentValue($test['detection'], $test['metadata']);
-                contentguard_debug_log("Test Case: {$test['name']}", [
+                plontis_debug_log("Test Case: {$test['name']}", [
                     'estimated_value' => $valuation['estimated_value'],
                     'content_type' => $valuation['breakdown']['content_type'],
                     'licensing_potential' => $valuation['licensing_potential']['potential'],
@@ -430,12 +430,12 @@ if (defined('WP_DEBUG') && WP_DEBUG) {
                 ]);
             }
             
-            contentguard_debug_log("Enhanced system test completed successfully");
+            plontis_debug_log("Enhanced system test completed successfully");
         } catch (Exception $e) {
-            contentguard_debug_log("Enhanced system test failed: " . $e->getMessage());
+            plontis_debug_log("Enhanced system test failed: " . $e->getMessage());
         }
     }
     
-    add_action('wp_loaded', 'contentguard_test_enhanced_system');
+    add_action('wp_loaded', 'plontis_test_enhanced_system');
 }
 ?>

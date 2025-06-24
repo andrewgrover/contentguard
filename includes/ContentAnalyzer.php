@@ -1,6 +1,6 @@
 <?php
 /**
- * ContentGuard Content Analyzer
+ * Plontis Content Analyzer
  * Analyzes webpage content to extract metadata for accurate value estimation
  */
 
@@ -9,7 +9,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-class ContentGuardContentAnalyzer {
+class PlontisContentAnalyzer {
     
     /**
      * Cache for analyzed content to avoid re-processing

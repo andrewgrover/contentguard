@@ -1,58 +1,39 @@
-// ContentGuard Admin JavaScript - Fixed Timing Version
+// Plontis Admin JavaScript - Clean Version (No Manual Buttons)
 jQuery(document).ready(function($) {
     
     // Wait for both DOM and scripts to be fully loaded
-    function initializeContentGuard() {
-        console.log('=== ContentGuard Initialization ===');
+    function initializePlontis() {
+        console.log('=== Plontis Initialization ===');
         console.log('jQuery loaded:', typeof jQuery !== 'undefined');
         console.log('Chart.js loaded:', typeof Chart !== 'undefined');
-        console.log('contentguard_ajax available:', typeof contentguard_ajax !== 'undefined');
+        console.log('plontis_ajax available:', typeof plontis_ajax !== 'undefined');
         
-        if (typeof contentguard_ajax === 'undefined') {
-            console.error('ContentGuard AJAX object not found - retrying in 1 second...');
-            setTimeout(initializeContentGuard, 1000);
+        if (typeof plontis_ajax === 'undefined') {
+            console.error('Plontis AJAX object not found - retrying in 1 second...');
+            setTimeout(initializePlontis, 1000);
             return;
         }
         
-        console.log('ContentGuard AJAX object found:', contentguard_ajax);
+        console.log('Plontis AJAX object found:', plontis_ajax);
         
         // Now we can safely initialize everything
         setupEventHandlers();
         
         // Initialize dashboard if we're on the right page
-        if ($('#contentguard-dashboard').length > 0 || $('.contentguard-admin').length > 0) {
-            console.log('Initializing ContentGuard dashboard...');
+        if ($('#plontis-dashboard').length > 0 || $('.plontis-admin').length > 0) {
+            console.log('Initializing Plontis dashboard...');
             loadDashboardData();
             loadRecentDetections();
         }
     }
     
     function setupEventHandlers() {
-        // Add manual refresh button
-        if ($('#manual-refresh').length === 0) {
-            $('<button class="button" id="manual-refresh" style="margin-left: 10px;">Manual Refresh Stats</button>').insertAfter('h1');
-        }
-        
-        // Add debug button
-        if ($('#debug-ajax').length === 0) {
-            $('<button class="button" id="debug-ajax" style="margin-left: 10px;">Debug AJAX</button>').insertAfter('#manual-refresh');
-        }
-        
-        // Bind events
-        $('#manual-refresh').off('click').on('click', function() {
-            console.log('Manual refresh clicked');
-            loadDashboardData();
-            loadRecentDetections();
-        });
-        
-        $('#debug-ajax').off('click').on('click', debugContentGuardAJAX);
-        
         // Tab functionality
-        $('.contentguard-tab-button').off('click').on('click', function() {
+        $('.plontis-tab-button').off('click').on('click', function() {
             const tabId = $(this).data('tab');
             
-            $('.contentguard-tab-button').removeClass('active');
-            $('.contentguard-tab-content').removeClass('active');
+            $('.plontis-tab-button').removeClass('active');
+            $('.plontis-tab-content').removeClass('active');
             
             $(this).addClass('active');
             $('#tab-' + tabId).addClass('active');
@@ -73,7 +54,7 @@ jQuery(document).ready(function($) {
                 return;
             }
             
-            $('#test-result').html('<div class="contentguard-loading">Testing...</div>');
+            $('#test-result').html('<div class="plontis-loading">Testing...</div>');
             
             const result = testUserAgentClientSide(userAgent);
             displayTestResult(userAgent, result);
@@ -92,14 +73,14 @@ jQuery(document).ready(function($) {
     function loadDashboardData() {
         console.log('Loading dashboard data...');
         
-        if (typeof contentguard_ajax === 'undefined') {
+        if (typeof plontis_ajax === 'undefined') {
             console.error('Cannot load dashboard data - AJAX object not available');
             return;
         }
         
-        $.post(contentguard_ajax.ajax_url, {
-            action: 'contentguard_get_stats',
-            nonce: contentguard_ajax.nonce
+        $.post(plontis_ajax.ajax_url, {
+            action: 'plontis_get_stats',
+            nonce: plontis_ajax.nonce
         }, function(response) {
             console.log('Stats response:', response);
             if (response.success) {
@@ -120,21 +101,21 @@ jQuery(document).ready(function($) {
     function loadRecentDetections() {
         console.log('Loading recent detections...');
         
-        if (typeof contentguard_ajax === 'undefined') {
+        if (typeof plontis_ajax === 'undefined') {
             console.error('Cannot load detections - AJAX object not available');
             return;
         }
         
         // Show loading immediately
-        $('#recent-detections').html('<div class="contentguard-loading">Loading enhanced detection data...</div>');
+        $('#recent-detections').html('<div class="plontis-loading">Loading enhanced detection data...</div>');
         
-        $.post(contentguard_ajax.ajax_url, {
-            action: 'contentguard_get_detections',
-            nonce: contentguard_ajax.nonce,
+        $.post(plontis_ajax.ajax_url, {
+            action: 'plontis_get_detections',
+            nonce: plontis_ajax.nonce,
             limit: 20,
             offset: 0
         }, function(response) {
-            console.log('=== ContentGuard Debug: AJAX Response ===');
+            console.log('=== Plontis Debug: AJAX Response ===');
             console.log('Response success:', response.success);
             console.log('Response data:', response.data);
             
@@ -146,7 +127,7 @@ jQuery(document).ready(function($) {
                 }
             } else {
                 console.error('Failed to load detections:', response);
-                $('#recent-detections').html('<div class="contentguard-no-data">Failed to load detection data: ' + (response.data || 'Unknown error') + '</div>');
+                $('#recent-detections').html('<div class="plontis-no-data">Failed to load detection data: ' + (response.data || 'Unknown error') + '</div>');
             }
         }).fail(function(xhr, status, error) {
             console.error('Detections AJAX failed:', error, xhr.responseText);
@@ -160,7 +141,7 @@ jQuery(document).ready(function($) {
             } else {
                 errorMsg += 'HTTP ' + xhr.status + ': ' + error;
             }
-            $('#recent-detections').html('<div class="contentguard-no-data">' + errorMsg + '<br><button onclick="debugContentGuardAJAX()" class="button">Debug AJAX</button></div>');
+            $('#recent-detections').html('<div class="plontis-no-data">' + errorMsg + '</div>');
         });
     }
     
@@ -168,7 +149,7 @@ jQuery(document).ready(function($) {
         const container = $('#recent-detections');
         
         // DEBUG: Log the received data
-        console.log('=== ContentGuard Debug: Received detections ===');
+        console.log('=== Plontis Debug: Received detections ===');
         console.log('Total detections:', detections.length);
         console.log('Sample detection:', detections[0]);
         
@@ -177,13 +158,13 @@ jQuery(document).ready(function($) {
                 message: 'No AI bot detections found in the last 30 days.',
                 suggestions: [
                     'Install a user agent switcher and visit your site with bot user agents to test detection',
-                    'Check that ContentGuard detection is enabled in settings'
+                    'Check that Plontis detection is enabled in settings'
                 ]
             });
             return;
         }
         
-        let html = '<div class="contentguard-detections-table">';
+        let html = '<div class="plontis-detections-table">';
         html += '<div class="detection-header">';
         html += '<div class="detection-col-time">Time</div>';
         html += '<div class="detection-col-company">Company</div>';
@@ -253,7 +234,7 @@ jQuery(document).ready(function($) {
             individualValues: detections.map(d => ({id: d.id, value: d.estimated_value}))
         });
         
-        html += '<div class="contentguard-summary">';
+        html += '<div class="plontis-summary">';
         html += `<div class="summary-item"><strong>${detections.length}</strong> total detections</div>`;
         html += `<div class="summary-item"><strong>${highRiskCount}</strong> high-risk bots</div>`;
         html += `<div class="summary-item"><strong>${commercialCount}</strong> commercial bots</div>`;
@@ -262,44 +243,8 @@ jQuery(document).ready(function($) {
         
         container.html(html);
         
-        console.log('=== ContentGuard Debug: Display completed ===');
+        console.log('=== Plontis Debug: Display completed ===');
     }
-    
-    // Global debug function
-    window.debugContentGuardAJAX = function() {
-        console.log('=== ContentGuard AJAX Debug ===');
-        console.log('AJAX URL:', contentguard_ajax ? contentguard_ajax.ajax_url : 'NOT AVAILABLE');
-        console.log('Nonce:', contentguard_ajax ? contentguard_ajax.nonce : 'NOT AVAILABLE');
-        
-        if (!contentguard_ajax) {
-            alert('ContentGuard AJAX object not available!');
-            return;
-        }
-        
-        // Test debug endpoint
-        $.post(contentguard_ajax.ajax_url, {
-            action: 'contentguard_debug',
-            nonce: contentguard_ajax.nonce
-        }, function(response) {
-            console.log('Debug response:', response);
-            alert('Debug response: ' + JSON.stringify(response, null, 2));
-        }).fail(function(xhr, status, error) {
-            console.error('Debug AJAX failed:', error, xhr.responseText);
-            alert('Debug AJAX failed: ' + error + '\nCheck console for details.');
-        });
-        
-        // Test detections endpoint
-        $.post(contentguard_ajax.ajax_url, {
-            action: 'contentguard_get_detections',
-            nonce: contentguard_ajax.nonce,
-            limit: 5,
-            offset: 0
-        }, function(response) {
-            console.log('Detections test response:', response);
-        }).fail(function(xhr, status, error) {
-            console.error('Detections test failed:', error, xhr.responseText);
-        });
-    };
     
     // Helper functions
     function updateStats(data) {
@@ -418,7 +363,7 @@ jQuery(document).ready(function($) {
     
     function displayNoDetections(data) {
         const container = $('#recent-detections');
-        let html = '<div class="contentguard-no-data">';
+        let html = '<div class="plontis-no-data">';
         html += '<h4>No AI Bot Detections Found</h4>';
         html += '<p>' + data.message + '</p>';
         if (data.suggestions) {
@@ -430,7 +375,6 @@ jQuery(document).ready(function($) {
         }
         html += '<div style="margin-top: 15px;">';
         html += '<button class="button button-primary" onclick="testDetection()">Test Detection</button>';
-        html += '<button class="button" onclick="debugContentGuardAJAX()" style="margin-left: 10px;">Debug AJAX</button>';
         html += '</div></div>';
         container.html(html);
     }
@@ -482,5 +426,5 @@ jQuery(document).ready(function($) {
     };
     
     // Start initialization
-    initializeContentGuard();
+    initializePlontis();
 });

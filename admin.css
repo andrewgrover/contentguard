@@ -1,30 +1,30 @@
-/* ContentGuard Admin Styles */
+/* plontis Admin Styles */
 
-.contentguard-admin {
+.plontis-admin {
     max-width: 1200px;
 }
 
-.contentguard-admin h1 {
+.plontis-admin h1 {
     display: flex;
     align-items: center;
     gap: 10px;
     margin-bottom: 30px;
 }
 
-.contentguard-admin h1 .dashicons {
+.plontis-admin h1 .dashicons {
     color: #dc3545;
     font-size: 32px;
 }
 
 /* Stats Grid */
-.contentguard-stats-grid {
+.plontis-stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: 20px;
     margin-bottom: 30px;
 }
 
-.contentguard-stat-card {
+.plontis-stat-card {
     background: #fff;
     border: 1px solid #e0e0e0;
     border-radius: 8px;
@@ -33,12 +33,12 @@
     transition: transform 0.2s ease;
 }
 
-.contentguard-stat-card:hover {
+.plontis-stat-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0,0,0,0.15);
 }
 
-.contentguard-stat-card h3 {
+.plontis-stat-card h3 {
     margin: 0 0 10px 0;
     font-size: 14px;
     font-weight: 600;
@@ -60,21 +60,20 @@
 }
 
 /* Dashboard Grid */
-.contentguard-dashboard-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-    margin-bottom: 30px;
+.plontis-dashboard-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 20px !important;
 }
 
 @media (max-width: 768px) {
-    .contentguard-dashboard-grid {
+    .plontis-dashboard-grid {
         grid-template-columns: 1fr;
     }
 }
 
 /* Panels */
-.contentguard-panel {
+.plontis-panel {
     background: #fff;
     border: 1px solid #e0e0e0;
     border-radius: 8px;
@@ -83,7 +82,7 @@
     margin-bottom: 20px;
 }
 
-.contentguard-panel h2 {
+.plontis-panel h2 {
     margin: 0 0 20px 0;
     font-size: 18px;
     font-weight: 600;
@@ -92,12 +91,15 @@
     padding-bottom: 10px;
 }
 
-.contentguard-panel canvas {
-    max-height: 300px;
+.plontis-panel canvas {
+    max-width: 100% !important;
+    max-height: 300px !important;
+    width: auto !important;
+    height: auto !important;
 }
 
 /* Detections Table */
-.contentguard-detections-table {
+.plontis-detections-table {
     border: 1px solid #e0e0e0;
     border-radius: 6px;
     overflow: hidden;
@@ -190,7 +192,7 @@
 }
 
 /* Summary */
-.contentguard-summary {
+.plontis-summary {
     display: flex;
     gap: 30px;
     padding: 15px 0;
@@ -209,7 +211,7 @@
 }
 
 /* CTA Section */
-.contentguard-cta {
+.plontis-cta {
     background: linear-gradient(135deg, #dc3545 0%, #fd7e14 100%);
     color: white;
     padding: 30px;
@@ -218,18 +220,18 @@
     margin-top: 30px;
 }
 
-.contentguard-cta h3 {
+.plontis-cta h3 {
     margin: 0 0 10px 0;
     font-size: 24px;
 }
 
-.contentguard-cta p {
+.plontis-cta p {
     margin: 0 0 20px 0;
     font-size: 16px;
     opacity: 0.9;
 }
 
-.contentguard-cta .button-hero {
+.plontis-cta .button-hero {
     font-size: 16px;
     padding: 12px 30px;
     background: #fff;
@@ -239,7 +241,7 @@
     transition: all 0.3s ease;
 }
 
-.contentguard-cta .button-hero:hover {
+.plontis-cta .button-hero:hover {
     background: #f8f9fa;
     transform: translateY(-2px);
 }
@@ -274,7 +276,7 @@
     font-size: 12px;
 }
 
-.contentguard-loading {
+.plontis-loading {
     text-align: center;
     padding: 20px;
     color: #666;
@@ -282,14 +284,14 @@
 }
 
 /* Loading States */
-.contentguard-loading {
+.plontis-loading {
     text-align: center;
     padding: 40px;
     color: #666;
     font-style: italic;
 }
 
-.contentguard-no-data {
+.plontis-no-data {
     text-align: center;
     padding: 40px;
     color: #888;
@@ -299,22 +301,22 @@
 }
 
 /* Dashboard Widget */
-.contentguard-widget {
+.plontis-widget {
     padding: 10px 0;
 }
 
-.contentguard-widget p {
+.plontis-widget p {
     margin: 8px 0;
     font-size: 14px;
 }
 
-.contentguard-widget .button {
+.plontis-widget .button {
     margin-right: 10px;
     margin-top: 10px;
 }
 
 /* Notifications */
-.contentguard-notification {
+.plontis-notification {
     position: fixed;
     top: 32px;
     right: 20px;
@@ -332,23 +334,23 @@
     gap: 10px;
 }
 
-.contentguard-notification.show {
+.plontis-notification.show {
     transform: translateX(0);
 }
 
-.contentguard-notification.info {
+.plontis-notification.info {
     border-left: 4px solid #0dcaf0;
 }
 
-.contentguard-notification.success {
+.plontis-notification.success {
     border-left: 4px solid #28a745;
 }
 
-.contentguard-notification.warning {
+.plontis-notification.warning {
     border-left: 4px solid #ffc107;
 }
 
-.contentguard-notification.error {
+.plontis-notification.error {
     border-left: 4px solid #dc3545;
 }
 
@@ -371,7 +373,7 @@
 }
 
 /* Settings Page */
-.contentguard-tabs {
+.plontis-tabs {
     margin-bottom: 20px;
     border-bottom: 1px solid #e0e0e0;
 }
@@ -421,22 +423,22 @@
 
 /* Responsive Design */
 @media (max-width: 1200px) {
-    .contentguard-stats-grid {
+    .plontis-stats-grid {
         grid-template-columns: repeat(2, 1fr);
     }
 }
 
 @media (max-width: 768px) {
-    .contentguard-stats-grid {
+    .plontis-stats-grid {
         grid-template-columns: 1fr;
     }
     
-    .contentguard-summary {
+    .plontis-summary {
         flex-direction: column;
         gap: 10px;
     }
     
-    .contentguard-notification {
+    .plontis-notification {
         right: 10px;
         left: 10px;
         max-width: none;
@@ -445,12 +447,12 @@
 
 /* Print Styles */
 @media print {
-    .contentguard-cta,
-    .contentguard-notification {
+    .plontis-cta,
+    .plontis-notification {
         display: none;
     }
     
-    .contentguard-panel {
+    .plontis-panel {
         break-inside: avoid;
         box-shadow: none;
         border: 1px solid #000;
@@ -460,7 +462,7 @@
 /* Additional Features */
 
 /* Pagination */
-.contentguard-pagination {
+.plontis-pagination {
     display: flex;
     justify-content: center;
     align-items: center;
@@ -536,7 +538,7 @@
 }
 
 /* Filters */
-.contentguard-filters {
+.plontis-filters {
     display: flex;
     gap: 15px;
     align-items: center;
@@ -570,7 +572,7 @@
 }
 
 /* Export Controls */
-.contentguard-export {
+.plontis-export {
     display: flex;
     gap: 10px;
     align-items: center;
@@ -605,7 +607,7 @@
 }
 
 /* Modals */
-.contentguard-modal {
+.plontis-modal {
     display: none;
     position: fixed;
     top: 0;
@@ -618,11 +620,11 @@
     justify-content: center;
 }
 
-.contentguard-modal.show {
+.plontis-modal.show {
     display: flex;
 }
 
-.contentguard-modal-content {
+.plontis-modal-content {
     background: #fff;
     border-radius: 8px;
     padding: 30px;
@@ -633,7 +635,7 @@
     position: relative;
 }
 
-.contentguard-modal-header {
+.plontis-modal-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -642,13 +644,13 @@
     border-bottom: 1px solid #e0e0e0;
 }
 
-.contentguard-modal-header h3 {
+.plontis-modal-header h3 {
     margin: 0;
     font-size: 18px;
     color: #333;
 }
 
-.contentguard-modal-close {
+.plontis-modal-close {
     background: none;
     border: none;
     font-size: 24px;
@@ -662,11 +664,11 @@
     justify-content: center;
 }
 
-.contentguard-modal-close:hover {
+.plontis-modal-close:hover {
     color: #333;
 }
 
-.contentguard-modal-footer {
+.plontis-modal-footer {
     display: flex;
     gap: 10px;
     justify-content: flex-end;
@@ -676,7 +678,7 @@
 }
 
 /* Tooltips */
-.contentguard-tooltip {
+.plontis-tooltip {
     position: absolute;
     background: #333;
     color: white;
@@ -689,7 +691,7 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
-.contentguard-tooltip:before {
+.plontis-tooltip:before {
     content: '';
     position: absolute;
     top: 100%;
@@ -808,12 +810,12 @@
 
 /* Responsive improvements */
 @media (max-width: 600px) {
-    .contentguard-filters {
+    .plontis-filters {
         flex-direction: column;
         align-items: stretch;
     }
     
-    .contentguard-export {
+    .plontis-export {
         flex-direction: column;
         align-items: stretch;
     }
@@ -822,7 +824,7 @@
         margin-bottom: 5px;
     }
     
-    .contentguard-modal-content {
+    .plontis-modal-content {
         width: 95%;
         padding: 20px;
     }

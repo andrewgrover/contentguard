@@ -1,6 +1,6 @@
 <?php
 /**
- * ContentGuard AJAX Class
+ * Plontis AJAX Class
  * Handles all AJAX requests for the admin interface
  */
 
@@ -9,27 +9,27 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-class ContentGuard_AJAX {
+class Plontis_AJAX {
     
     private $value_calculator;
     private $content_analyzer;
 
     public function __construct() {
-        $this->value_calculator = new ContentGuardValueCalculator();
-        $this->content_analyzer = new ContentGuardContentAnalyzer();
+        $this->value_calculator = new PlontisValueCalculator();
+        $this->content_analyzer = new PlontisContentAnalyzer();
     }
 
     public function init() {
         // **CRITICAL FIX: Actually register the AJAX actions with WordPress**
-        add_action('wp_ajax_contentguard_get_detections', [$this, 'ajax_get_detections']);
-        add_action('wp_ajax_contentguard_get_stats', [$this, 'ajax_get_enhanced_stats']);
-        add_action('wp_ajax_contentguard_test', [$this, 'ajax_test']);
-        add_action('wp_ajax_contentguard_get_valuation_details', [$this, 'ajax_get_valuation_details']);
-        add_action('wp_ajax_contentguard_analyze_content', [$this, 'ajax_analyze_content']);
-        add_action('wp_ajax_contentguard_get_portfolio_analysis', [$this, 'ajax_get_portfolio_analysis']);
+        add_action('wp_ajax_plontis_get_detections', [$this, 'ajax_get_detections']);
+        add_action('wp_ajax_plontis_get_stats', [$this, 'ajax_get_enhanced_stats']);
+        add_action('wp_ajax_plontis_test', [$this, 'ajax_test']);
+        add_action('wp_ajax_plontis_get_valuation_details', [$this, 'ajax_get_valuation_details']);
+        add_action('wp_ajax_plontis_analyze_content', [$this, 'ajax_analyze_content']);
+        add_action('wp_ajax_plontis_get_portfolio_analysis', [$this, 'ajax_get_portfolio_analysis']);
         
         // Add debugging
-        add_action('wp_ajax_contentguard_debug', [$this, 'ajax_debug']);
+        add_action('wp_ajax_plontis_debug', [$this, 'ajax_debug']);
     }
 
     /**
@@ -37,7 +37,7 @@ class ContentGuard_AJAX {
      */
     public function ajax_debug() {
         global $wpdb;
-        $table_name = $wpdb->prefix . 'contentguard_detections';
+        $table_name = $wpdb->prefix . 'plontis_detections';
         
         $debug_info = [
             'timestamp' => current_time('mysql'),
@@ -60,13 +60,13 @@ class ContentGuard_AJAX {
      */
     public function ajax_get_enhanced_stats() {
         // Add nonce check but with better error handling
-        if (!check_ajax_referer('contentguard_nonce', 'nonce', false)) {
+        if (!check_ajax_referer('plontis_nonce', 'nonce', false)) {
             wp_send_json_error('Security check failed');
             return;
         }
         
         global $wpdb;
-        $table_name = $wpdb->prefix . 'contentguard_detections';
+        $table_name = $wpdb->prefix . 'plontis_detections';
         
         // Check if table exists
         $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") == $table_name;
@@ -84,7 +84,7 @@ class ContentGuard_AJAX {
              ORDER BY detected_at DESC"
         ), ARRAY_A);
         
-        error_log("ContentGuard Stats: Retrieved " . count($detections) . " raw detections for portfolio calculation");
+        error_log("Plontis Stats: Retrieved " . count($detections) . " raw detections for portfolio calculation");
         
         // Calculate enhanced valuations for each detection - SAME AS DETECTIONS METHOD
         $enhanced_detections = [];
@@ -114,10 +114,10 @@ class ContentGuard_AJAX {
                 
                 $enhanced_detections[] = $detection;
                 
-                error_log("ContentGuard Stats: Calculated fresh value " . $valuation['estimated_value'] . " for detection " . $detection['id']);
+                error_log("Plontis Stats: Calculated fresh value " . $valuation['estimated_value'] . " for detection " . $detection['id']);
                 
             } catch (Exception $e) {
-                error_log("ContentGuard Stats: Error calculating value for detection " . $detection['id'] . ": " . $e->getMessage());
+                error_log("Plontis Stats: Error calculating value for detection " . $detection['id'] . ": " . $e->getMessage());
                 
                 // Use fallback but make it obvious
                 $detection['estimated_value'] = 0.00;
@@ -132,7 +132,7 @@ class ContentGuard_AJAX {
         // NOW calculate portfolio analysis using the enhanced detections
         $portfolio_analysis = $this->value_calculator->calculatePortfolioValue($enhanced_detections);
         
-        error_log("ContentGuard Stats: Portfolio analysis total value: " . $portfolio_analysis['total_portfolio_value']);
+        error_log("Plontis Stats: Portfolio analysis total value: " . $portfolio_analysis['total_portfolio_value']);
         
         // Get basic stats from enhanced detections
         $total_bots = count($enhanced_detections);
@@ -205,13 +205,13 @@ class ContentGuard_AJAX {
 
     public function ajax_get_detections() {
         // Better nonce handling
-        if (!check_ajax_referer('contentguard_nonce', 'nonce', false)) {
+        if (!check_ajax_referer('plontis_nonce', 'nonce', false)) {
             wp_send_json_error('Security check failed');
             return;
         }
         
         global $wpdb;
-        $table_name = $wpdb->prefix . 'contentguard_detections';
+        $table_name = $wpdb->prefix . 'plontis_detections';
         
         // Check if table exists
         $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") == $table_name;
@@ -220,7 +220,7 @@ class ContentGuard_AJAX {
                 'message' => 'Database table not found. Please activate the plugin.',
                 'detections' => [],
                 'suggestions' => [
-                    'Deactivate and reactivate the ContentGuard plugin',
+                    'Deactivate and reactivate the Plontis plugin',
                     'Check database permissions',
                     'Contact support if issue persists'
                 ]
@@ -241,7 +241,7 @@ class ContentGuard_AJAX {
         ), ARRAY_A);
         
         // DEBUG: Log what we got from database
-        error_log("ContentGuard AJAX: Retrieved " . count($detections) . " detections from database");
+        error_log("Plontis AJAX: Retrieved " . count($detections) . " detections from database");
         
         // If no detections found, provide a helpful message
         if (empty($detections)) {
@@ -249,7 +249,7 @@ class ContentGuard_AJAX {
                 'message' => 'No AI bot detections found in the last 30 days.',
                 'detections' => [],
                 'suggestions' => [
-                    'Check that ContentGuard detection is enabled in settings',
+                    'Check that Plontis detection is enabled in settings',
                     'Visit your site with a bot user agent to test detection: Mozilla/5.0 (compatible; GPTBot/1.0; +https://openai.com/gptbot)',
                     'Ensure the plugin is properly activated',
                     'Check that your site is publicly accessible to bots'
@@ -263,17 +263,17 @@ class ContentGuard_AJAX {
         
         foreach ($detections as $detection) {
             try {
-                error_log("ContentGuard AJAX: Processing detection ID " . $detection['id'] . " for company " . $detection['company']);
+                error_log("Plontis AJAX: Processing detection ID " . $detection['id'] . " for company " . $detection['company']);
                 
                 // Check if we have the required classes
                 if (!$this->content_analyzer || !$this->value_calculator) {
-                    error_log("ContentGuard AJAX: Missing calculator classes!");
+                    error_log("Plontis AJAX: Missing calculator classes!");
                     throw new Exception("Value calculator not available");
                 }
                 
                 // Analyze content using current enhanced system
                 $content_metadata = $this->content_analyzer->analyzeContent($detection['request_uri']);
-                error_log("ContentGuard AJAX: Content analysis completed for " . $detection['request_uri']);
+                error_log("Plontis AJAX: Content analysis completed for " . $detection['request_uri']);
                 
                 // Calculate value using current enhanced calculator
                 $detection_data = [
@@ -286,7 +286,7 @@ class ContentGuard_AJAX {
                 ];
                 
                 $valuation = $this->value_calculator->calculateContentValue($detection_data, $content_metadata);
-                error_log("ContentGuard AJAX: Calculated value " . $valuation['estimated_value'] . " for detection " . $detection['id']);
+                error_log("Plontis AJAX: Calculated value " . $valuation['estimated_value'] . " for detection " . $detection['id']);
                 
                 // Add enhanced data to detection (OVERRIDE any old database values)
                 $detection['estimated_value'] = $valuation['estimated_value'];
@@ -307,7 +307,7 @@ class ContentGuard_AJAX {
                 $enhanced_detections[] = $detection;
                 
             } catch (Exception $e) {
-                error_log("ContentGuard AJAX: Error calculating value for detection " . $detection['id'] . ": " . $e->getMessage());
+                error_log("Plontis AJAX: Error calculating value for detection " . $detection['id'] . ": " . $e->getMessage());
                 
                 // If valuation fails, use fallback values but make them obvious
                 $detection['estimated_value'] = 99.99; // Obvious fallback value
@@ -324,14 +324,14 @@ class ContentGuard_AJAX {
             }
         }
         
-        error_log("ContentGuard AJAX: Sending " . count($enhanced_detections) . " enhanced detections to frontend");
+        error_log("Plontis AJAX: Sending " . count($enhanced_detections) . " enhanced detections to frontend");
         
         // Send enhanced detections
         wp_send_json_success($enhanced_detections);
     }
 
     public function ajax_get_valuation_details() {
-        if (!check_ajax_referer('contentguard_nonce', 'nonce', false)) {
+        if (!check_ajax_referer('plontis_nonce', 'nonce', false)) {
             wp_send_json_error('Security check failed');
             return;
         }
@@ -343,7 +343,7 @@ class ContentGuard_AJAX {
         }
         
         global $wpdb;
-        $table_name = $wpdb->prefix . 'contentguard_detections';
+        $table_name = $wpdb->prefix . 'plontis_detections';
         
         $detection = $wpdb->get_row($wpdb->prepare(
             "SELECT * FROM $table_name WHERE id = %d",
@@ -362,7 +362,7 @@ class ContentGuard_AJAX {
             'detection' => $detection,
             'valuation' => $valuation,
             'content_metadata' => $content_metadata,
-            'comparable_rates' => ContentGuardLicensingMarketData::getComparableDeals(
+            'comparable_rates' => PlontisLicensingMarketData::getComparableDeals(
                 $content_metadata['content_type'] ?? 'article',
                 $detection['company']
             )
@@ -370,7 +370,7 @@ class ContentGuard_AJAX {
     }
 
     public function ajax_analyze_content() {
-        if (!check_ajax_referer('contentguard_nonce', 'nonce', false)) {
+        if (!check_ajax_referer('plontis_nonce', 'nonce', false)) {
             wp_send_json_error('Security check failed');
             return;
         }
@@ -387,13 +387,13 @@ class ContentGuard_AJAX {
     }
 
     public function ajax_get_portfolio_analysis() {
-        if (!check_ajax_referer('contentguard_nonce', 'nonce', false)) {
+        if (!check_ajax_referer('plontis_nonce', 'nonce', false)) {
             wp_send_json_error('Security check failed');
             return;
         }
         
         global $wpdb;
-        $table_name = $wpdb->prefix . 'contentguard_detections';
+        $table_name = $wpdb->prefix . 'plontis_detections';
         
         $days = intval($_POST['days'] ?? 30);
         
@@ -421,7 +421,7 @@ class ContentGuard_AJAX {
         }
         
         // Get licensing recommendations using market data
-        $licensing_recommendations = ContentGuardLicensingMarketData::getLicensingRecommendations(
+        $licensing_recommendations = PlontisLicensingMarketData::getLicensingRecommendations(
             $portfolio_analysis['total_portfolio_value'],
             array_unique(array_column($content_analyses, 'content_type')),
             array_keys($portfolio_analysis['top_value_companies'] ?? [])
@@ -436,12 +436,12 @@ class ContentGuard_AJAX {
 
     public function ajax_test() {
         wp_send_json_success([
-            'message' => 'Enhanced ContentGuard AJAX is working!', 
+            'message' => 'Enhanced Plontis AJAX is working!', 
             'time' => current_time('mysql'), 
-            'version' => CONTENTGUARD_VERSION,
-            'value_calculator' => class_exists('ContentGuardValueCalculator'),
-            'content_analyzer' => class_exists('ContentGuardContentAnalyzer'),
-            'market_data' => class_exists('ContentGuardLicensingMarketData')
+            'version' => PLONTIS_VERSION,
+            'value_calculator' => class_exists('PlontisValueCalculator'),
+            'content_analyzer' => class_exists('PlontisContentAnalyzer'),
+            'market_data' => class_exists('PlontisLicensingMarketData')
         ]);
     }
 }

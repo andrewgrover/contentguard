@@ -1,6 +1,6 @@
 <?php
 /**
- * ContentGuard Admin Class
+ * Plontis Admin Class
  * Handles all admin interface functionality - FIXED SCRIPT LOADING
  */
 
@@ -9,16 +9,16 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-class ContentGuard_Admin {
+class Plontis_Admin {
     
     private $value_calculator;
     private $content_analyzer;
     private $core;
 
     public function __construct() {
-        $this->value_calculator = new ContentGuardValueCalculator();
-        $this->content_analyzer = new ContentGuardContentAnalyzer();
-        $this->core = new ContentGuard_Core();
+        $this->value_calculator = new PlontisValueCalculator();
+        $this->content_analyzer = new PlontisContentAnalyzer();
+        $this->core = new Plontis_Core();
     }
 
     public function init() {
@@ -32,19 +32,19 @@ class ContentGuard_Admin {
 
     public function admin_scripts($hook) {
         // Debug what page we're on
-        error_log("ContentGuard: admin_scripts called on hook: $hook");
+        error_log("Plontis: admin_scripts called on hook: $hook");
         
         // Load on ALL admin pages for now to debug
-        // Later we can restrict to: if (strpos($hook, 'contentguard') === false) return;
+        // Later we can restrict to: if (strpos($hook, 'plontis') === false) return;
         
         // Make sure we have the plugin URL constant
-        if (!defined('CONTENTGUARD_PLUGIN_URL')) {
-            error_log("ContentGuard: CONTENTGUARD_PLUGIN_URL not defined!");
+        if (!defined('PLONTIS_PLUGIN_URL')) {
+            error_log("Plontis: PLONTIS_PLUGIN_URL not defined!");
             return;
         }
         
-        $plugin_url = CONTENTGUARD_PLUGIN_URL;
-        $version = defined('CONTENTGUARD_VERSION') ? CONTENTGUARD_VERSION : '2.0.0';
+        $plugin_url = PLONTIS_PLUGIN_URL;
+        $version = defined('PLONTIS_VERSION') ? PLONTIS_VERSION : '2.0.0';
         
         // Build file paths
         $admin_js_url = $plugin_url . 'admin.js';
@@ -52,10 +52,10 @@ class ContentGuard_Admin {
         $chart_js_url = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js';
         
         // Check if files exist
-        $admin_js_path = CONTENTGUARD_PLUGIN_PATH . 'admin.js';
-        $admin_css_path = CONTENTGUARD_PLUGIN_PATH . 'admin.css';
+        $admin_js_path = PLONTIS_PLUGIN_PATH . 'admin.js';
+        $admin_css_path = PLONTIS_PLUGIN_PATH . 'admin.css';
         
-        error_log("ContentGuard: Checking files...");
+        error_log("Plontis: Checking files...");
         error_log("  admin.js exists: " . (file_exists($admin_js_path) ? 'YES' : 'NO') . " at $admin_js_path");
         error_log("  admin.css exists: " . (file_exists($admin_css_path) ? 'YES' : 'NO') . " at $admin_css_path");
         error_log("  admin.js URL: $admin_js_url");
@@ -65,74 +65,65 @@ class ContentGuard_Admin {
         
         // Enqueue our admin styles
         if (file_exists($admin_css_path)) {
-            wp_enqueue_style('contentguard-admin', $admin_css_url, [], $version);
-            error_log("ContentGuard: admin.css enqueued successfully");
+            wp_enqueue_style('plontis-admin', $admin_css_url, [], $version);
+            error_log("Plontis: admin.css enqueued successfully");
         } else {
-            error_log("ContentGuard: admin.css file not found!");
+            error_log("Plontis: admin.css file not found!");
         }
         
         // Enqueue our admin scripts
         if (file_exists($admin_js_path)) {
-            wp_enqueue_script('contentguard-admin', $admin_js_url, ['jquery', 'chart-js'], $version . '-' . time(), true);
-            error_log("ContentGuard: admin.js enqueued successfully");
+            wp_enqueue_script('plontis-admin', $admin_js_url, ['jquery', 'chart-js'], $version . '-' . time(), true);
+            error_log("Plontis: admin.js enqueued successfully");
             
             // Localize script with AJAX data
-            wp_localize_script('contentguard-admin', 'contentguard_ajax', [
+            wp_localize_script('plontis-admin', 'plontis_ajax', [
                 'ajax_url' => admin_url('admin-ajax.php'),
-                'nonce' => wp_create_nonce('contentguard_nonce'),
+                'nonce' => wp_create_nonce('plontis_nonce'),
                 'version' => $version,
                 'plugin_url' => $plugin_url,
-                'settings_url' => admin_url('admin.php?page=contentguard-settings'),
+                'settings_url' => admin_url('admin.php?page=plontis-settings'),
                 'debug' => WP_DEBUG
             ]);
-            error_log("ContentGuard: AJAX data localized");
+            error_log("Plontis: AJAX data localized");
         } else {
-            error_log("ContentGuard: admin.js file not found at $admin_js_path");
+            error_log("Plontis: admin.js file not found at $admin_js_path");
         }
     }
 
     public function add_admin_menu() {
         add_menu_page(
-            'ContentGuard',
-            'ContentGuard',
+            'Plontis',
+            'Plontis',
             'manage_options',
-            'contentguard',
+            'plontis',
             [$this, 'admin_page'],
-            CONTENTGUARD_PLUGIN_URL . 'logo.png',
+            'dashicons-shield-alt',
             30
         );
 
         add_submenu_page(
-            'contentguard',
+            'plontis',
             'Settings',
             'Settings',
             'manage_options',
-            'contentguard-settings',
+            'plontis-settings',
             [$this, 'settings_page']
         );
         
         add_submenu_page(
-            'contentguard',
+            'plontis',
             'Valuation Report',
             'Valuation Report',
             'manage_options',
-            'contentguard-valuation',
+            'plontis-valuation',
             [$this, 'valuation_page']
-        );
-
-        add_submenu_page(
-            'contentguard',
-            'Licensing Report',
-            'Licensing Report',
-            'manage_options',
-            'contentguard-licensing',
-            [$this, 'licensing_page']
         );
     }
 
     public function admin_page() {
         global $wpdb;
-        $table_name = $wpdb->prefix . 'contentguard_detections';
+        $table_name = $wpdb->prefix . 'plontis_detections';
         
         // Get raw detections (no old estimated_value) - same as AJAX methods
         $raw_detections = $wpdb->get_results(
@@ -183,57 +174,57 @@ class ContentGuard_Admin {
         $portfolio_analysis = $this->value_calculator->calculatePortfolioValue($enhanced_detections);
         
         ?>
-        <div class="wrap contentguard-admin" id="contentguard-dashboard">
+        <div class="wrap plontis-admin" id="plontis-dashboard">
             <h1>
-                <img src="<?php echo CONTENTGUARD_PLUGIN_URL; ?>logo.png" style="width: 32px; height: 32px; vertical-align: middle; margin-right: 10px;" alt="ContentGuard">
-                ContentGuard - AI Bot Detection v<?php echo CONTENTGUARD_VERSION; ?>
+                <span class="dashicons dashicons-shield-alt"></span>
+                Plontis - AI Bot Detection v<?php echo PLONTIS_VERSION; ?>
             </h1>
             
-            <div class="contentguard-stats-grid">
-                <div class="contentguard-stat-card">
+            <div class="plontis-stats-grid">
+                <div class="plontis-stat-card">
                     <h3>Total AI Bots Detected</h3>
                     <div class="stat-number" id="total-bots">-</div>
                     <span class="stat-period">Last 30 days</span>
                 </div>
                 
-                <div class="contentguard-stat-card">
+                <div class="plontis-stat-card">
                     <h3>Portfolio Value</h3>
                     <div class="stat-number" id="content-value">$<?php echo number_format($portfolio_analysis['total_portfolio_value'], 2); ?></div>
                     <span class="stat-period">Industry-accurate pricing</span>
                 </div>
                 
-                <div class="contentguard-stat-card">
+                <div class="plontis-stat-card">
                     <h3>Commercial Bots</h3>
                     <div class="stat-number" id="commercial-bots">-</div>
                     <span class="stat-period">High-value opportunities</span>
                 </div>
                 
-                <div class="contentguard-stat-card">
+                <div class="plontis-stat-card">
                     <h3>Average Per Detection</h3>
                     <div class="stat-number" id="average-value">$<?php echo number_format($portfolio_analysis['average_value_per_access'], 2); ?></div>
                     <span class="stat-period">Market-based estimate</span>
                 </div>
             </div>
 
-            <div class="contentguard-dashboard-grid">
-                <div class="contentguard-panel">
+            <div class="plontis-dashboard-grid">
+                <div class="plontis-panel">
                     <h2>AI Bot Activity Trends</h2>
                     <canvas id="activity-chart" width="400" height="200"></canvas>
                 </div>
                 
-                <div class="contentguard-panel">
+                <div class="plontis-panel">
                     <h2>Content Value by Company</h2>
                     <canvas id="companies-chart" width="400" height="200"></canvas>
                 </div>
             </div>
 
             <!-- Enhanced Testing Section -->
-            <div class="contentguard-panel">
+            <div class="plontis-panel">
                 <h2>Test Bot Detection & Valuation</h2>
-                <p>Test any user agent string to see how ContentGuard detects and values AI bot access.</p>
+                <p>Test any user agent string to see how Plontis detects and values AI bot access.</p>
                 
                 <form method="post" action="">
-                    <?php wp_nonce_field('contentguard_test', 'test_nonce'); ?>
+                    <?php wp_nonce_field('plontis_test', 'test_nonce'); ?>
                     <table class="form-table">
                         <tr>
                             <th scope="row">User Agent String</th>
@@ -256,7 +247,7 @@ class ContentGuard_Admin {
                 
                 <?php
                 // Enhanced test detection with accurate valuation
-                if (isset($_POST['test_detection']) && wp_verify_nonce($_POST['test_nonce'], 'contentguard_test')) {
+                if (isset($_POST['test_detection']) && wp_verify_nonce($_POST['test_nonce'], 'plontis_test')) {
                     $test_user_agent = sanitize_text_field($_POST['test_user_agent']);
                     $test_uri = sanitize_text_field($_POST['test_uri'] ?: '/');
                     
@@ -310,21 +301,18 @@ class ContentGuard_Admin {
                 ?>
             </div>
             
-            <div class="contentguard-panel">
+            <div class="plontis-panel">
                 <h2>Recent AI Bot Detections</h2>
                 <div id="recent-detections">
-                    <div class="contentguard-loading">Loading detection data...</div>
+                    <div class="plontis-loading">Loading detection data...</div>
                 </div>
             </div>
 
-            <div class="contentguard-cta">
+            <div class="plontis-cta">
                 <h3>Ready to Monetize Your Content?</h3>
                 <p>Your content is worth <strong>$<?php echo number_format($portfolio_analysis['estimated_annual_revenue'], 2); ?></strong> annually. Start tracking AI bot activity and explore licensing opportunities.</p>
-                <a href="https://contentguard.ai/join" class="button button-primary button-hero" target="_blank">
+                <a href="https://plontis.ai/join" class="button button-primary button-hero" target="_blank">
                     Explore Licensing Platform
-                </a>
-                <a href="<?php echo admin_url('admin.php?page=contentguard-valuation'); ?>" class="button button-secondary" style="margin-left: 15px;">
-                    View Detailed Report
                 </a>
             </div>
         </div>
@@ -371,21 +359,21 @@ class ContentGuard_Admin {
                 'high_value_threshold' => floatval($_POST['high_value_threshold'] ?? 50.00),
                 'licensing_notification_threshold' => floatval($_POST['licensing_notification_threshold'] ?? 100.00)
             ];
-            update_option('contentguard_settings', $settings);
+            update_option('plontis_settings', $settings);
             echo '<div class="notice notice-success"><p>Enhanced settings saved!</p></div>';
         }
 
-        $settings = get_option('contentguard_settings');
+        $settings = get_option('plontis_settings');
         ?>
         <div class="wrap">
-            <h1>ContentGuard Enhanced Settings</h1>
+            <h1>Plontis Enhanced Settings</h1>
             
             <form method="post" action="">
                 <table class="form-table">
                     <tr>
                         <th scope="row">Enable AI Bot Detection</th>
                         <td>
-                            <input type="checkbox" name="enable_detection" <?php checked($settings['enable_detection']); ?> />
+                            <input type="checkbox" name="enable_detection" <?php checked($settings['enable_detection'] ?? true); ?> />
                             <p class="description">Monitor your website for AI bot activity</p>
                         </td>
                     </tr>
@@ -401,7 +389,7 @@ class ContentGuard_Admin {
                     <tr>
                         <th scope="row">Email Notifications</th>
                         <td>
-                            <input type="checkbox" name="enable_notifications" <?php checked($settings['enable_notifications']); ?> />
+                            <input type="checkbox" name="enable_notifications" <?php checked($settings['enable_notifications'] ?? true); ?> />
                             <p class="description">Get notified when high-value AI bots are detected</p>
                         </td>
                     </tr>
@@ -409,7 +397,7 @@ class ContentGuard_Admin {
                     <tr>
                         <th scope="row">Notification Email</th>
                         <td>
-                            <input type="email" name="notification_email" value="<?php echo esc_attr($settings['notification_email']); ?>" class="regular-text" />
+                            <input type="email" name="notification_email" value="<?php echo esc_attr($settings['notification_email'] ?? true); ?>" class="regular-text" />
                         </td>
                     </tr>
                     
@@ -424,7 +412,7 @@ class ContentGuard_Admin {
                     <tr>
                         <th scope="row">Log Retention</th>
                         <td>
-                            <input type="number" name="log_retention_days" value="<?php echo esc_attr($settings['log_retention_days']); ?>" min="7" max="365" />
+                            <input type="number" name="log_retention_days" value="<?php echo esc_attr($settings['log_retention_days'] ?? true); ?>" min="7" max="365" />
                             <p class="description">Days to keep detection logs (recommended: 90)</p>
                         </td>
                     </tr>
@@ -432,7 +420,7 @@ class ContentGuard_Admin {
                     <tr>
                         <th scope="row">Track All Bots</th>
                         <td>
-                            <input type="checkbox" name="track_legitimate_bots" <?php checked($settings['track_legitimate_bots']); ?> />
+                            <input type="checkbox" name="track_legitimate_bots" <?php checked($settings['track_legitimate_bots'] ?? true); ?> />
                             <p class="description">Also track legitimate search engine bots (increases log volume)</p>
                         </td>
                     </tr>
@@ -449,12 +437,12 @@ class ContentGuard_Admin {
      */
     public function valuation_page() {
         global $wpdb;
-        $table_name = $wpdb->prefix . 'contentguard_detections';
+        $table_name = $wpdb->prefix . 'plontis_detections';
         
         // Check if table exists
         $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") == $table_name;
         if (!$table_exists) {
-            echo '<div class="wrap"><h1>ContentGuard - Valuation Report</h1>';
+            echo '<div class="wrap"><h1>Plontis - Valuation Report</h1>';
             echo '<div class="notice notice-error"><p>Database table not found. Please reactivate the plugin.</p></div>';
             echo '</div>';
             return;
@@ -508,10 +496,10 @@ class ContentGuard_Admin {
         $portfolio_analysis = $this->value_calculator->calculatePortfolioValue($enhanced_detections);
         
         ?>
-        <div class="wrap contentguard-admin">
-            <h1>ContentGuard - Detailed Valuation Report</h1>
+        <div class="wrap plontis-admin">
+            <h1>Plontis - Detailed Valuation Report</h1>
             
-            <div class="contentguard-panel">
+            <div class="plontis-panel">
                 <h2>Portfolio Summary</h2>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
                     <div>
@@ -533,7 +521,7 @@ class ContentGuard_Admin {
                 </div>
             </div>
             
-            <div class="contentguard-panel">
+            <div class="plontis-panel">
                 <h2>Value Breakdown by Company</h2>
                 <table class="wp-list-table widefat fixed striped">
                     <thead>
@@ -588,7 +576,7 @@ class ContentGuard_Admin {
                 </table>
             </div>
             
-            <div class="contentguard-panel">
+            <div class="plontis-panel">
                 <h2>Recent High-Value Detections</h2>
                 <table class="wp-list-table widefat fixed striped">
                     <thead>
@@ -629,7 +617,7 @@ class ContentGuard_Admin {
                 </table>
             </div>
             
-            <div class="contentguard-panel">
+            <div class="plontis-panel">
                 <h2>Licensing Recommendations</h2>
                 <?php if (!empty($portfolio_analysis['recommendations'])): ?>
                     <?php foreach ($portfolio_analysis['recommendations'] as $recommendation): ?>
@@ -652,10 +640,10 @@ class ContentGuard_Admin {
                 <?php endif; ?>
             </div>
             
-            <div class="contentguard-cta">
+            <div class="plontis-cta">
                 <h3>Ready to Monetize Your Content?</h3>
                 <p>Your content portfolio is worth <strong>$<?php echo number_format($portfolio_analysis['total_portfolio_value'], 2); ?></strong> with an estimated annual revenue potential of <strong>$<?php echo number_format($portfolio_analysis['estimated_annual_revenue'], 2); ?></strong>.</p>
-                <a href="https://contentguard.ai/licensing" class="button button-primary button-hero" target="_blank">
+                <a href="https://plontis.ai/licensing" class="button button-primary button-hero" target="_blank">
                     Start Licensing Your Content
                 </a>
             </div>
@@ -701,15 +689,15 @@ class ContentGuard_Admin {
 
     public function add_dashboard_widget() {
         wp_add_dashboard_widget(
-            'contentguard_widget',
-            'ContentGuard - Enhanced AI Bot Activity',
+            'plontis_widget',
+            'Plontis - Enhanced AI Bot Activity',
             [$this, 'dashboard_widget_content']
         );
     }
 
     public function dashboard_widget_content() {
         global $wpdb;
-        $table_name = $wpdb->prefix . 'contentguard_detections';
+        $table_name = $wpdb->prefix . 'plontis_detections';
         
         $recent_bots = $wpdb->get_var(
             "SELECT COUNT(*) FROM $table_name WHERE detected_at > DATE_SUB(NOW(), INTERVAL 7 DAY)"
@@ -724,18 +712,18 @@ class ContentGuard_Admin {
         ) ?: 0;
         
         ?>
-        <div class="contentguard-widget">
+        <div class="plontis-widget">
             <p><strong><?php echo $recent_bots; ?></strong> AI bots detected this week</p>
             <p><strong><?php echo $high_value; ?></strong> high-value opportunities (≥$50)</p>
             <p><strong>$<?php echo number_format($total_value, 2); ?></strong> total estimated value this week</p>
             <p>
-                <a href="<?php echo admin_url('admin.php?page=contentguard'); ?>" class="button">
+                <a href="<?php echo admin_url('admin.php?page=plontis'); ?>" class="button">
                     View Enhanced Dashboard
                 </a>
-                <a href="<?php echo admin_url('admin.php?page=contentguard-valuation'); ?>" class="button">
+                <a href="<?php echo admin_url('admin.php?page=plontis-valuation'); ?>" class="button">
                     Valuation Report
                 </a>
-                <a href="https://contentguard.ai/licensing" target="_blank" class="button button-primary">
+                <a href="https://plontis.ai/licensing" target="_blank" class="button button-primary">
                     Start Earning
                 </a>
             </p>

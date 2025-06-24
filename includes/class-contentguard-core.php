@@ -1,6 +1,6 @@
 <?php
 /**
- * ContentGuard Core Class
+ * Plontis Core Class
  * Handles bot detection and logging functionality
  */
 
@@ -9,7 +9,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-class ContentGuard_Core {
+class Plontis_Core {
     
     private $bot_signatures = [
         'OpenAI' => [
@@ -105,8 +105,8 @@ class ContentGuard_Core {
     private $content_analyzer;
 
     public function __construct() {
-        $this->value_calculator = new ContentGuardValueCalculator();
-        $this->content_analyzer = new ContentGuardContentAnalyzer();
+        $this->value_calculator = new PlontisValueCalculator();
+        $this->content_analyzer = new PlontisContentAnalyzer();
     }
 
     public function init() {
@@ -126,7 +126,7 @@ class ContentGuard_Core {
     private function create_enhanced_tables() {
         global $wpdb;
 
-        $table_name = $wpdb->prefix . 'contentguard_detections';
+        $table_name = $wpdb->prefix . 'plontis_detections';
         $charset_collate = $wpdb->get_charset_collate();
 
         $sql = "CREATE TABLE $table_name (
@@ -162,7 +162,7 @@ class ContentGuard_Core {
     }
 
     private function set_default_options() {
-        add_option('contentguard_settings', [
+        add_option('plontis_settings', [
             'enable_detection' => true,
             'enable_notifications' => true,
             'notification_email' => get_option('admin_email'),
@@ -180,7 +180,7 @@ class ContentGuard_Core {
      */
     public function add_enhanced_sample_data() {
         global $wpdb;
-        $table_name = $wpdb->prefix . 'contentguard_detections';
+        $table_name = $wpdb->prefix . 'plontis_detections';
         
         // Check if we already have sample data
         $existing = $wpdb->get_var("SELECT COUNT(*) FROM $table_name WHERE ip_address = '127.0.0.1'");
@@ -258,7 +258,7 @@ class ContentGuard_Core {
      * Enhanced bot detection with value calculation
      */
     public function detect_and_log_bots() {
-        $settings = get_option('contentguard_settings');
+        $settings = get_option('plontis_settings');
         if (!$settings['enable_detection']) {
             return;
         }
@@ -292,7 +292,7 @@ class ContentGuard_Core {
      */
     private function log_enhanced_detection($user_agent, $ip_address, $request_uri, $detection) {
         global $wpdb;
-        $table_name = $wpdb->prefix . 'contentguard_detections';
+        $table_name = $wpdb->prefix . 'plontis_detections';
         
         // Analyze content using our content analyzer
         $content_metadata = $this->content_analyzer->analyzeContent($request_uri);
@@ -336,16 +336,16 @@ class ContentGuard_Core {
      */
     private function send_enhanced_notification($detection, $request_uri, $valuation) {
         // Throttle notifications
-        $throttle_key = "contentguard_notification_{$detection['bot_type']}";
+        $throttle_key = "plontis_notification_{$detection['bot_type']}";
         if (get_transient($throttle_key)) {
             return;
         }
 
-        $settings = get_option('contentguard_settings');
+        $settings = get_option('plontis_settings');
         $to = $settings['notification_email'];
         $subject = "High-Value AI Bot Detected - {$detection['company']} - \${$valuation['estimated_value']}";
         
-        $message = "ContentGuard has detected a high-value AI bot accessing your content:\n\n";
+        $message = "Plontis has detected a high-value AI bot accessing your content:\n\n";
         $message .= "Company: {$detection['company']}\n";
         $message .= "Bot Type: {$detection['bot_type']}\n";
         $message .= "Page Accessed: {$request_uri}\n";
@@ -373,8 +373,8 @@ class ContentGuard_Core {
         }
         
         $message .= "\nTime: " . current_time('Y-m-d H:i:s') . "\n";
-        $message .= "View detailed analysis: " . admin_url('admin.php?page=contentguard') . "\n";
-        $message .= "Join ContentGuard platform: https://contentguard.ai/licensing";
+        $message .= "View detailed analysis: " . admin_url('admin.php?page=plontis') . "\n";
+        $message .= "Join Plontis platform: https://plontis.ai/licensing";
 
         wp_mail($to, $subject, $message);
         set_transient($throttle_key, true, HOUR_IN_SECONDS * 4); // 4 hour throttle
@@ -463,10 +463,10 @@ class ContentGuard_Core {
 
     public function cleanup_old_logs() {
         global $wpdb;
-        $settings = get_option('contentguard_settings');
+        $settings = get_option('plontis_settings');
         $retention_days = $settings['log_retention_days'] ?? 90;
         
-        $table_name = $wpdb->prefix . 'contentguard_detections';
+        $table_name = $wpdb->prefix . 'plontis_detections';
         $wpdb->query($wpdb->prepare(
             "DELETE FROM $table_name WHERE detected_at < DATE_SUB(NOW(), INTERVAL %d DAY)",
             $retention_days

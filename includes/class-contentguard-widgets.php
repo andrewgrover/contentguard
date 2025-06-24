@@ -1,6 +1,6 @@
 <?php
 /**
- * ContentGuard Widgets Class
+ * Plontis Widgets Class
  * Handles shortcodes and widgets for frontend display
  */
 
@@ -9,24 +9,24 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-class ContentGuard_Widgets {
+class Plontis_Widgets {
     
     private $value_calculator;
 
     public function __construct() {
-        $this->value_calculator = new ContentGuardValueCalculator();
+        $this->value_calculator = new PlontisValueCalculator();
     }
 
     public function init() {
         // Register shortcodes
-        add_shortcode('contentguard_stats', [$this, 'stats_shortcode']);
+        add_shortcode('plontis_stats', [$this, 'stats_shortcode']);
         
         // Register widgets
         add_action('widgets_init', [$this, 'register_widgets']);
     }
 
     /**
-     * Shortcode for displaying ContentGuard stats
+     * Shortcode for displaying Plontis stats
      */
     public function stats_shortcode($atts) {
         $atts = shortcode_atts([
@@ -35,7 +35,7 @@ class ContentGuard_Widgets {
         ], $atts);
         
         global $wpdb;
-        $table_name = $wpdb->prefix . 'contentguard_detections';
+        $table_name = $wpdb->prefix . 'plontis_detections';
         
         $detections = $wpdb->get_results($wpdb->prepare(
             "SELECT * FROM $table_name WHERE detected_at > DATE_SUB(NOW(), INTERVAL %d DAY)",
@@ -53,7 +53,7 @@ class ContentGuard_Widgets {
         switch ($atts['show']) {
             case 'value':
                 ?>
-                <div class="contentguard-stats-widget">
+                <div class="plontis-stats-widget">
                     <h4>Content Portfolio Value</h4>
                     <p class="portfolio-value">$<?php echo number_format($portfolio_analysis['total_portfolio_value'], 2); ?></p>
                     <p class="portfolio-subtitle">Based on <?php echo count($detections); ?> AI bot detections</p>
@@ -63,7 +63,7 @@ class ContentGuard_Widgets {
                 
             case 'detections':
                 ?>
-                <div class="contentguard-stats-widget">
+                <div class="plontis-stats-widget">
                     <h4>AI Bot Activity</h4>
                     <p><strong><?php echo count($detections); ?></strong> total detections</p>
                     <p><strong><?php echo $portfolio_analysis['high_value_content_count']; ?></strong> high-value opportunities</p>
@@ -74,7 +74,7 @@ class ContentGuard_Widgets {
                 
             case 'companies':
                 ?>
-                <div class="contentguard-stats-widget">
+                <div class="plontis-stats-widget">
                     <h4>Top AI Companies</h4>
                     <?php if (!empty($portfolio_analysis['top_value_companies'])): ?>
                         <ul>
@@ -91,8 +91,8 @@ class ContentGuard_Widgets {
                 
             default: // summary
                 ?>
-                <div class="contentguard-stats-widget">
-                    <h4>ContentGuard Summary</h4>
+                <div class="plontis-stats-widget">
+                    <h4>Plontis Summary</h4>
                     <div class="stats-grid">
                         <div class="stat-item">
                             <span class="stat-number"><?php echo count($detections); ?></span>
@@ -111,7 +111,7 @@ class ContentGuard_Widgets {
                 </div>
                 
                 <style>
-                .contentguard-stats-widget {
+                .plontis-stats-widget {
                     border: 1px solid #ddd;
                     padding: 20px;
                     border-radius: 5px;
@@ -165,19 +165,19 @@ class ContentGuard_Widgets {
     }
 
     public function register_widgets() {
-        register_widget('ContentGuard_Stats_Widget');
+        register_widget('Plontis_Stats_Widget');
     }
 }
 
 /**
- * Widget for displaying ContentGuard stats
+ * Widget for displaying Plontis stats
  */
-class ContentGuard_Stats_Widget extends WP_Widget {
+class Plontis_Stats_Widget extends WP_Widget {
     
     public function __construct() {
         parent::__construct(
-            'contentguard_stats_widget',
-            'ContentGuard Stats',
+            'plontis_stats_widget',
+            'Plontis Stats',
             ['description' => 'Display AI bot detection statistics']
         );
     }
@@ -193,7 +193,7 @@ class ContentGuard_Stats_Widget extends WP_Widget {
             echo $args['before_title'] . $title . $args['after_title'];
         }
         
-        $widgets = new ContentGuard_Widgets();
+        $widgets = new Plontis_Widgets();
         echo $widgets->stats_shortcode([
             'days' => $days,
             'show' => $show_type

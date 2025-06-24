@@ -1,6 +1,6 @@
 <?php
 /**
- * ContentGuard Value Integration
+ * Plontis Value Integration
  * Integrates the advanced value calculation system with the main plugin
  */
 
@@ -9,25 +9,25 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// Include the value calculation classes
-require_once CONTENTGUARD_PLUGIN_PATH . 'ContentValueCalculator.php';
-require_once CONTENTGUARD_PLUGIN_PATH . 'ContentAnalyzer.php';
-require_once CONTENTGUARD_PLUGIN_PATH . 'LicensingMarketData.php';
+// Include the value calculation classes with correct paths
+require_once PLONTIS_PLUGIN_PATH . 'includes/ContentValueCalculator.php';
+require_once PLONTIS_PLUGIN_PATH . 'includes/ContentAnalyzer.php';
+require_once PLONTIS_PLUGIN_PATH . 'includes/LicensingMarketData.php';
 
-class ContentGuardValueIntegration {
+class PlontisValueIntegration {
     
     private $value_calculator;
     private $content_analyzer;
     
     public function __construct() {
-        $this->value_calculator = new ContentGuardValueCalculator();
-        $this->content_analyzer = new ContentGuardContentAnalyzer();
+        $this->value_calculator = new PlontisValueCalculator();
+        $this->content_analyzer = new PlontisContentAnalyzer();
         
         // Hook into the main plugin
-        add_action('contentguard_bot_detected', [$this, 'handleBotDetection'], 10, 2);
-        add_filter('contentguard_calculate_value', [$this, 'calculateAdvancedValue'], 10, 2);
-        add_action('wp_ajax_contentguard_get_value_breakdown', [$this, 'ajaxGetValueBreakdown']);
-        add_action('wp_ajax_contentguard_analyze_content', [$this, 'ajaxAnalyzeContent']);
+        add_action('plontis_bot_detected', [$this, 'handleBotDetection'], 10, 2);
+        add_filter('plontis_calculate_value', [$this, 'calculateAdvancedValue'], 10, 2);
+        add_action('wp_ajax_plontis_get_value_breakdown', [$this, 'ajaxGetValueBreakdown']);
+        add_action('wp_ajax_plontis_analyze_content', [$this, 'ajaxAnalyzeContent']);
     }
     
     /**
@@ -72,7 +72,7 @@ class ContentGuardValueIntegration {
     private function storeEnhancedDetection($detection_data, $value_data, $content_metadata) {
         global $wpdb;
         
-        $table_name = $wpdb->prefix . 'contentguard_detections';
+        $table_name = $wpdb->prefix . 'plontis_detections';
         
         // Update the detection record with enhanced data
         $detection_id = $detection_data['id'] ?? null;
@@ -112,7 +112,7 @@ class ContentGuardValueIntegration {
      * Trigger high-value detection notifications
      */
     private function triggerHighValueNotification($detection_data, $value_data) {
-        $settings = get_option('contentguard_settings', []);
+        $settings = get_option('plontis_settings', []);
         
         if (!($settings['enable_notifications'] ?? false)) {
             return;
@@ -123,17 +123,17 @@ class ContentGuardValueIntegration {
         $licensing_potential = $value_data['licensing_potential']['potential'];
         
         // Throttle notifications - only send once per day for same company
-        $throttle_key = "contentguard_high_value_notification_{$company}";
+        $throttle_key = "plontis_high_value_notification_{$company}";
         if (get_transient($throttle_key)) {
             return;
         }
         
         $to = $settings['notification_email'] ?? get_option('admin_email');
-        $subject = "High-Value AI Bot Detection: ${company} - ${estimated_value}";
+        $subject = "High-Value AI Bot Detection: {$company} - {$estimated_value}";
         
-        $message = "ContentGuard has detected high-value AI bot activity:\n\n";
+        $message = "Plontis has detected high-value AI bot activity:\n\n";
         $message .= "Company: {$company}\n";
-        $message .= "Estimated Content Value: ${estimated_value}\n";
+        $message .= "Estimated Content Value: {$estimated_value}\n";
         $message .= "Licensing Potential: {$licensing_potential}\n";
         $message .= "Page Accessed: {$detection_data['request_uri']}\n";
         $message .= "Detection Time: " . current_time('Y-m-d H:i:s') . "\n\n";
@@ -149,8 +149,8 @@ class ContentGuardValueIntegration {
         $message .= "Licensing Recommendation:\n";
         $message .= $value_data['licensing_potential']['recommendation'] . "\n\n";
         
-        $message .= "View detailed analysis: " . admin_url('admin.php?page=contentguard&detection_id=' . ($detection_data['id'] ?? '')) . "\n";
-        $message .= "Join ContentGuard platform: https://contentguard.ai/join\n";
+        $message .= "View detailed analysis: " . admin_url('admin.php?page=plontis&detection_id=' . ($detection_data['id'] ?? '')) . "\n";
+        $message .= "Join Plontis platform: https://plontis.ai/join\n";
         
         wp_mail($to, $subject, $message);
         
@@ -162,7 +162,7 @@ class ContentGuardValueIntegration {
      * AJAX handler for getting value breakdown
      */
     public function ajaxGetValueBreakdown() {
-        check_ajax_referer('contentguard_nonce', 'nonce');
+        check_ajax_referer('plontis_nonce', 'nonce');
         
         $detection_id = intval($_POST['detection_id'] ?? 0);
         
@@ -171,7 +171,7 @@ class ContentGuardValueIntegration {
         }
         
         global $wpdb;
-        $table_name = $wpdb->prefix . 'contentguard_detections';
+        $table_name = $wpdb->prefix . 'plontis_detections';
         
         $detection = $wpdb->get_row($wpdb->prepare(
             "SELECT * FROM $table_name WHERE id = %d",
@@ -190,7 +190,7 @@ class ContentGuardValueIntegration {
             'detection' => $detection,
             'value_data' => $value_data,
             'content_metadata' => $content_metadata,
-            'comparable_rates' => ContentGuardLicensingMarketData::getComparableDeals(
+            'comparable_rates' => PlontisLicensingMarketData::getComparableDeals(
                 $content_metadata['content_type'] ?? 'article',
                 $detection['company']
             )
@@ -201,7 +201,7 @@ class ContentGuardValueIntegration {
      * AJAX handler for analyzing content
      */
     public function ajaxAnalyzeContent() {
-        check_ajax_referer('contentguard_nonce', 'nonce');
+        check_ajax_referer('plontis_nonce', 'nonce');
         
         $url = sanitize_url($_POST['url'] ?? '');
         
@@ -219,7 +219,7 @@ class ContentGuardValueIntegration {
      */
     public function getPortfolioAnalysis($days = 30) {
         global $wpdb;
-        $table_name = $wpdb->prefix . 'contentguard_detections';
+        $table_name = $wpdb->prefix . 'plontis_detections';
         
         // Get recent detections
         $detections = $wpdb->get_results($wpdb->prepare(
@@ -250,7 +250,7 @@ class ContentGuardValueIntegration {
             'content_summary' => $content_summary,
             'period_days' => $days,
             'detection_count' => count($detections),
-            'licensing_recommendations' => ContentGuardLicensingMarketData::getLicensingRecommendations(
+            'licensing_recommendations' => PlontisLicensingMarketData::getLicensingRecommendations(
                 $portfolio_data['total_portfolio_value'],
                 array_keys($content_summary['content_types']),
                 array_keys($portfolio_data['top_value_companies'] ?? [])
@@ -279,8 +279,8 @@ class ContentGuardValueIntegration {
     private function generateHTMLReport($portfolio) {
         ob_start();
         ?>
-        <div class="contentguard-licensing-report">
-            <h2>ContentGuard Licensing Report</h2>
+        <div class="plontis-licensing-report">
+            <h2>Plontis Licensing Report</h2>
             <p><strong>Report Period:</strong> Last <?php echo $portfolio['period_days']; ?> days</p>
             <p><strong>Generated:</strong> <?php echo current_time('Y-m-d H:i:s'); ?></p>
             
@@ -344,7 +344,7 @@ class ContentGuardValueIntegration {
         </div>
         
         <style>
-        .contentguard-licensing-report {
+        .plontis-licensing-report {
             max-width: 800px;
             margin: 20px 0;
             font-family: Arial, sans-serif;
@@ -371,7 +371,7 @@ class ContentGuardValueIntegration {
      */
     private function generateCSVReport($portfolio) {
         global $wpdb;
-        $table_name = $wpdb->prefix . 'contentguard_detections';
+        $table_name = $wpdb->prefix . 'plontis_detections';
         
         $detections = $wpdb->get_results($wpdb->prepare(
             "SELECT * FROM $table_name WHERE detected_at > DATE_SUB(NOW(), INTERVAL %d DAY) ORDER BY detected_at DESC",
@@ -402,21 +402,21 @@ class ContentGuardValueIntegration {
      */
     public function updateDatabaseSchema() {
         global $wpdb;
-        $table_name = $wpdb->prefix . 'contentguard_detections';
+        $table_name = $wpdb->prefix . 'plontis_detections';
         
         // Add new columns for enhanced value tracking
-        $wpdb->query("ALTER TABLE $table_name ADD COLUMN IF NOT EXISTS estimated_value DECIMAL(10,2) DEFAULT 0.00");
-        $wpdb->query("ALTER TABLE $table_name ADD COLUMN IF NOT EXISTS content_type VARCHAR(50) DEFAULT 'unknown'");
-        $wpdb->query("ALTER TABLE $table_name ADD COLUMN IF NOT EXISTS content_quality TINYINT DEFAULT 50");
-        $wpdb->query("ALTER TABLE $table_name ADD COLUMN IF NOT EXISTS word_count INT DEFAULT 0");
-        $wpdb->query("ALTER TABLE $table_name ADD COLUMN IF NOT EXISTS technical_depth VARCHAR(20) DEFAULT 'basic'");
-        $wpdb->query("ALTER TABLE $table_name ADD COLUMN IF NOT EXISTS value_breakdown TEXT");
-        $wpdb->query("ALTER TABLE $table_name ADD COLUMN IF NOT EXISTS licensing_potential VARCHAR(20) DEFAULT 'low'");
+        $wpdb->query("ALTER TABLE {$table_name} ADD COLUMN IF NOT EXISTS estimated_value DECIMAL(10,2) DEFAULT 0.00");
+        $wpdb->query("ALTER TABLE {$table_name} ADD COLUMN IF NOT EXISTS content_type VARCHAR(50) DEFAULT 'unknown'");
+        $wpdb->query("ALTER TABLE {$table_name} ADD COLUMN IF NOT EXISTS content_quality TINYINT DEFAULT 50");
+        $wpdb->query("ALTER TABLE {$table_name} ADD COLUMN IF NOT EXISTS word_count INT DEFAULT 0");
+        $wpdb->query("ALTER TABLE {$table_name} ADD COLUMN IF NOT EXISTS technical_depth VARCHAR(20) DEFAULT 'basic'");
+        $wpdb->query("ALTER TABLE {$table_name} ADD COLUMN IF NOT EXISTS value_breakdown TEXT");
+        $wpdb->query("ALTER TABLE {$table_name} ADD COLUMN IF NOT EXISTS licensing_potential VARCHAR(20) DEFAULT 'low'");
         
         // Add indexes for performance
-        $wpdb->query("CREATE INDEX IF NOT EXISTS idx_estimated_value ON $table_name(estimated_value)");
-        $wpdb->query("CREATE INDEX IF NOT EXISTS idx_content_type ON $table_name(content_type)");
-        $wpdb->query("CREATE INDEX IF NOT EXISTS idx_licensing_potential ON $table_name(licensing_potential)");
+        $wpdb->query("CREATE INDEX IF NOT EXISTS idx_estimated_value ON {$table_name}(estimated_value)");
+        $wpdb->query("CREATE INDEX IF NOT EXISTS idx_content_type ON {$table_name}(content_type)");
+        $wpdb->query("CREATE INDEX IF NOT EXISTS idx_licensing_potential ON {$table_name}(licensing_potential)");
     }
 }
 ?>

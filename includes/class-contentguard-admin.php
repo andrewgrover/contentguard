@@ -322,7 +322,7 @@ class Plontis_Admin {
             <div class="plontis-cta">
                 <h3>Ready to Monetize Your Content?</h3>
                 <p>Your content is worth <strong>$<?php echo number_format($portfolio_analysis['estimated_annual_revenue'], 2); ?></strong> annually. Start tracking AI bot activity and explore licensing opportunities.</p>
-                <a href="https://plontis.ai/join" class="button button-primary button-hero" target="_blank">
+                <a href="https://plontis.com" class="button button-primary button-hero" target="_blank">
                     Explore Licensing Platform
                 </a>
             </div>
@@ -384,23 +384,15 @@ class Plontis_Admin {
                     <tr>
                         <th scope="row">Enable AI Bot Detection</th>
                         <td>
-                            <input type="checkbox" name="enable_detection" <?php checked($settings['enable_detection'] ?? true); ?> />
+                            <input type="checkbox" name="enable_detection" <?php checked($settings['enable_detection']); ?> />
                             <p class="description">Monitor your website for AI bot activity</p>
-                        </td>
-                    </tr>
-                    
-                    <tr>
-                        <th scope="row">Enhanced Valuation System</th>
-                        <td>
-                            <input type="checkbox" name="enhanced_valuation" <?php checked($settings['enhanced_valuation'] ?? true); ?> />
-                            <p class="description">Use industry-accurate pricing based on Getty Images, music licensing, and academic publishing rates</p>
                         </td>
                     </tr>
                     
                     <tr>
                         <th scope="row">Email Notifications</th>
                         <td>
-                            <input type="checkbox" name="enable_notifications" <?php checked($settings['enable_notifications'] ?? true); ?> />
+                            <input type="checkbox" name="enable_notifications" <?php checked($settings['enable_notifications']); ?> />
                             <p class="description">Get notified when high-value AI bots are detected</p>
                         </td>
                     </tr>
@@ -408,7 +400,7 @@ class Plontis_Admin {
                     <tr>
                         <th scope="row">Notification Email</th>
                         <td>
-                            <input type="email" name="notification_email" value="<?php echo esc_attr($settings['notification_email'] ?? true); ?>" class="regular-text" />
+                            <input type="email" name="notification_email" value="<?php echo esc_attr($settings['notification_email']); ?>" class="regular-text" />
                         </td>
                     </tr>
                     
@@ -423,7 +415,7 @@ class Plontis_Admin {
                     <tr>
                         <th scope="row">Log Retention</th>
                         <td>
-                            <input type="number" name="log_retention_days" value="<?php echo esc_attr($settings['log_retention_days'] ?? true); ?>" min="7" max="365" />
+                            <input type="number" name="log_retention_days" value="<?php echo esc_attr($settings['log_retention_days']); ?>" min="7" max="365" />
                             <p class="description">Days to keep detection logs (recommended: 90)</p>
                         </td>
                     </tr>
@@ -431,7 +423,7 @@ class Plontis_Admin {
                     <tr>
                         <th scope="row">Track All Bots</th>
                         <td>
-                            <input type="checkbox" name="track_legitimate_bots" <?php checked($settings['track_legitimate_bots'] ?? true); ?> />
+                            <input type="checkbox" name="track_legitimate_bots" <?php checked($settings['track_legitimate_bots']); ?> />
                             <p class="description">Also track legitimate search engine bots (increases log volume)</p>
                         </td>
                     </tr>
@@ -734,7 +726,7 @@ class Plontis_Admin {
                 <a href="<?php echo admin_url('admin.php?page=plontis-valuation'); ?>" class="button">
                     Valuation Report
                 </a>
-                <a href="https://plontis.com" target="_blank" class="button button-primary">
+                <a href="https://plontis.ai/licensing" target="_blank" class="button button-primary">
                     Start Earning
                 </a>
             </p>

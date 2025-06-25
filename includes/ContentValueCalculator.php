@@ -217,7 +217,7 @@ class PlontisValueCalculator {
         // Cap by content quality
         $quality_score = $content_metadata['quality_score'] ?? 50;
         if ($quality_score < 60) {
-            $estimated_value = min($estimated_value, 15.00); // Max $15 for low quality
+            $estimated_value = min($estimated_value, 26.00); // Max $15 for low quality
         }
         
         // Debug logging

@@ -200,34 +200,13 @@
 .detection-header,
 .detection-row {
     display: grid;
-    grid-template-columns: 100px 120px 120px 1fr 80px 80px;
+    grid-template-columns: 100px 120px 120px 130px 1fr 80px 80px; /* Added 130px for IP column */
     gap: 15px;
     padding: 12px 15px;
     align-items: center;
 }
 
-.detection-header {
-    background: #f8f9fa;
-    font-weight: 600;
-    font-size: 12px;
-    text-transform: uppercase;
-    color: #666;
-    border-bottom: 1px solid #e0e0e0;
-}
-
-.detection-row {
-    border-bottom: 1px solid #f0f0f0;
-    transition: background-color 0.2s ease;
-}
-
-.detection-row:hover {
-    background: #f8f9fa;
-}
-
-.detection-row:last-child {
-    border-bottom: none;
-}
-
+/* Mobile responsive - stack all columns */
 @media (max-width: 768px) {
     .detection-header,
     .detection-row {
@@ -251,6 +230,15 @@
         display: inline-block;
         width: 80px;
     }
+    
+    /* Add labels for mobile */
+    .detection-col-time:before { content: "Time: "; }
+    .detection-col-company:before { content: "Company: "; }
+    .detection-col-bot:before { content: "Bot: "; }
+    .detection-col-ip:before { content: "IP: "; }
+    .detection-col-page:before { content: "Page: "; }
+    .detection-col-risk:before { content: "Risk: "; }
+    .detection-col-value:before { content: "Value: "; }
 }
 
 /* Risk Badges */

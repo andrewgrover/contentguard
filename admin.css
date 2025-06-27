@@ -883,6 +883,49 @@
     animation: spin 1s linear infinite;
 }
 
+.plontis-demo-banner {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 15px 20px;
+    margin-bottom: 20px;
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+    border: 1px solid #ffeaa7;
+    border-radius: 8px;
+    position: relative;
+}
+
+.demo-banner-icon {
+    font-size: 24px;
+    flex-shrink: 0;
+}
+
+.demo-banner-content {
+    flex: 1;
+}
+
+.demo-banner-content h4 {
+    margin: 0 0 5px 0;
+    color: #856404;
+    font-size: 16px;
+}
+
+.demo-banner-content p {
+    margin: 0;
+    color: #856404;
+    font-size: 14px;
+}
+
+.demo-banner-badge {
+    background: #ffc107;
+    color: #212529;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }

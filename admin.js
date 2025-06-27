@@ -145,14 +145,22 @@ jQuery(document).ready(function($) {
         });
     }
     
-    function displayDetections(detections) {
+    function displayDetections(response) {
         const container = $('#recent-detections');
-        
-        // DEBUG: Log the received data
-        console.log('=== Plontis Debug: Received detections ===');
-        console.log('Total detections:', detections.length);
-        console.log('Sample detection:', detections[0]);
-        
+        const detections = response.detections || response;
+
+        let html = '';
+        if (response.is_demo_mode) {
+            html += '<div class="plontis-demo-banner">';
+            html += '<div class="demo-banner-icon">📊</div>';
+            html += '<div class="demo-banner-content">';
+            html += '<h4>Sample Data Preview</h4>';
+            html += '<p>' + response.demo_message + '</p>';
+            html += '</div>';
+            html += '<div class="demo-banner-badge">DEMO</div>';
+            html += '</div>';
+        }
+
         if (!detections || detections.length === 0) {
             displayNoDetections({
                 message: 'No AI bot detections found in the last 30 days.',
@@ -164,54 +172,42 @@ jQuery(document).ready(function($) {
             return;
         }
         
-        let html = '<div class="plontis-detections-table">';
+        html += '<div class="plontis-detections-table">';
         html += '<div class="detection-header">';
         html += '<div class="detection-col-time">Time</div>';
         html += '<div class="detection-col-company">Company</div>';
         html += '<div class="detection-col-bot">Bot Type</div>';
+        html += '<div class="detection-col-ip">IP Address</div>';  // NEW COLUMN
         html += '<div class="detection-col-page">Page</div>';
         html += '<div class="detection-col-risk">Risk</div>';
         html += '<div class="detection-col-value">Est. Value</div>';
         html += '</div>';
         
         detections.forEach(function(detection, index) {
-            // DEBUG: Log each detection's value data
-            console.log(`Detection ${index + 1} (ID: ${detection.id}):`, {
-                company: detection.company,
-                raw_estimated_value: detection.estimated_value,
-                type_of_value: typeof detection.estimated_value,
-                debug_info: detection._debug || 'No debug info'
-            });
-            
             const date = new Date(detection.detected_at);
             const timeAgo = getTimeAgo(date);
             const riskClass = getRiskClass(detection.risk_level);
             
-            // Parse the estimated value - ensure it's a number
             let estimatedValue = 0;
             if (detection.estimated_value !== undefined && detection.estimated_value !== null) {
                 estimatedValue = parseFloat(detection.estimated_value);
                 if (isNaN(estimatedValue)) {
-                    console.warn('Invalid estimated_value for detection', detection.id, ':', detection.estimated_value);
                     estimatedValue = 0;
                 }
             }
             
             const displayValue = estimatedValue > 0 ? '$' + estimatedValue.toFixed(2) : '$0.00';
             
-            // DEBUG: Log the processed value
-            console.log(`Processed value for detection ${detection.id}:`, {
-                raw: detection.estimated_value,
-                parsed: estimatedValue,
-                display: displayValue,
-                calculation_source: detection._debug ? detection._debug.calculation_method : 'unknown'
-            });
+            // Truncate IP for display if needed
+            const displayIP = detection.ip_address || 'Unknown';
+            const shortIP = displayIP.length > 15 ? displayIP.substring(0, 12) + '...' : displayIP;
             
             html += '<div class="detection-row">';
             html += `<div class="detection-col-time">${timeAgo}</div>`;
             html += `<div class="detection-col-company">${escapeHtml(detection.company || 'Unknown')}</div>`;
             html += `<div class="detection-col-bot">${escapeHtml(detection.bot_type || 'Unknown')}</div>`;
-            html += `<div class="detection-col-page">${escapeHtml(detection.request_uri ? detection.request_uri.substring(0, 50) : '')}${detection.request_uri && detection.request_uri.length > 50 ? '...' : ''}</div>`;
+            html += `<div class="detection-col-ip" title="${escapeHtml(displayIP)}">${escapeHtml(shortIP)}</div>`;  // NEW IP COLUMN
+            html += `<div class="detection-col-page">${escapeHtml(detection.request_uri ? detection.request_uri.substring(0, 30) : '')}${detection.request_uri && detection.request_uri.length > 30 ? '...' : ''}</div>`;
             html += `<div class="detection-col-risk"><span class="risk-badge ${riskClass}">${detection.risk_level || 'unknown'}</span></div>`;
             html += `<div class="detection-col-value">${displayValue}</div>`;
             html += '</div>';
@@ -242,8 +238,6 @@ jQuery(document).ready(function($) {
         html += '</div>';
         
         container.html(html);
-        
-        console.log('=== Plontis Debug: Display completed ===');
     }
     
     // Helper functions

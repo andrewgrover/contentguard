@@ -128,18 +128,36 @@ class Plontis_Admin {
             [$this, 'valuation_page']
         );
     }
+    
 
     public function admin_page() {
         global $wpdb;
         $table_name = $wpdb->prefix . 'plontis_detections';
         
-        // Get raw detections (no old estimated_value) - same as AJAX methods
-        $raw_detections = $wpdb->get_results(
-            "SELECT id, user_agent, ip_address, request_uri, bot_type, company, risk_level, confidence, commercial_risk, detected_at
-             FROM $table_name 
-             WHERE detected_at > DATE_SUB(NOW(), INTERVAL 30 DAY)", 
-            ARRAY_A
+        // ADD DEMO FILTERING - same logic as AJAX
+        $real_count = $wpdb->get_var(
+            "SELECT COUNT(*) FROM $table_name WHERE (is_demo_data IS NULL OR is_demo_data = 0)"
         );
+        $has_real_data = $real_count > 0;
+        
+        if ($has_real_data) {
+            // Only real detections
+            $raw_detections = $wpdb->get_results(
+                "SELECT id, user_agent, ip_address, request_uri, bot_type, company, risk_level, confidence, commercial_risk, detected_at
+                FROM $table_name 
+                WHERE (is_demo_data IS NULL OR is_demo_data = 0)
+                AND detected_at > DATE_SUB(NOW(), INTERVAL 30 DAY)",
+                ARRAY_A
+            );
+        } else {
+            // Include demo data for new users
+            $raw_detections = $wpdb->get_results(
+                "SELECT id, user_agent, ip_address, request_uri, bot_type, company, risk_level, confidence, commercial_risk, detected_at, is_demo_data
+                FROM $table_name 
+                WHERE detected_at > DATE_SUB(NOW(), INTERVAL 30 DAY)",
+                ARRAY_A
+            );
+        }
         
         // Calculate fresh portfolio analysis
         $enhanced_detections = [];

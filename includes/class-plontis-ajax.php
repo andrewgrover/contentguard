@@ -75,72 +75,47 @@ class Plontis_AJAX {
             return;
         }
         
-        // Get raw detections - DON'T pull old estimated_value from database
-        // This matches exactly what ajax_get_detections() does
-        $detections = $wpdb->get_results($wpdb->prepare(
-            "SELECT id, user_agent, ip_address, request_uri, bot_type, company, risk_level, confidence, commercial_risk, detected_at
-             FROM $table_name 
-             WHERE detected_at > DATE_SUB(NOW(), INTERVAL 30 DAY) 
-             ORDER BY detected_at DESC"
-        ), ARRAY_A);
+       $days = intval($_POST['days'] ?? 30);
+    
+        // Use SAME filtering logic as ajax_get_detections
+        $real_count = $wpdb->get_var(
+            "SELECT COUNT(*) FROM $table_name WHERE (is_demo_data IS NULL OR is_demo_data = 0)"
+        );
+        $has_real_data = $real_count > 0;
+        
+        if ($has_real_data) {
+            // Only real detections for stats
+            $detections = $wpdb->get_results($wpdb->prepare(
+                "SELECT * FROM $table_name 
+                WHERE (is_demo_data IS NULL OR is_demo_data = 0)
+                AND detected_at > DATE_SUB(NOW(), INTERVAL %d DAY) 
+                ORDER BY detected_at DESC",
+                $days
+            ), ARRAY_A);
+        } else {
+            // Include demo data for new users
+            $detections = $wpdb->get_results($wpdb->prepare(
+                "SELECT * FROM $table_name 
+                WHERE detected_at > DATE_SUB(NOW(), INTERVAL %d DAY) 
+                ORDER BY detected_at DESC",
+                $days
+            ), ARRAY_A);
+        }
         
         error_log("Plontis Stats: Retrieved " . count($detections) . " raw detections for portfolio calculation");
         
-        // Calculate enhanced valuations for each detection - SAME AS DETECTIONS METHOD
-        $enhanced_detections = [];
-        
-        foreach ($detections as $detection) {
-            try {
-                // Analyze content using current enhanced system
-                $content_metadata = $this->content_analyzer->analyzeContent($detection['request_uri']);
-                
-                // Calculate value using current enhanced calculator
-                $detection_data = [
-                    'company' => $detection['company'],
-                    'bot_type' => $detection['bot_type'],
-                    'request_uri' => $detection['request_uri'],
-                    'risk_level' => $detection['risk_level'],
-                    'confidence' => intval($detection['confidence'] ?? 50),
-                    'commercial_risk' => $detection['commercial_risk']
-                ];
-                
-                $valuation = $this->value_calculator->calculateContentValue($detection_data, $content_metadata);
-                
-                // Add enhanced data to detection
-                $detection['estimated_value'] = $valuation['estimated_value'];
-                $detection['content_type'] = $content_metadata['content_type'] ?? 'article';
-                $detection['content_quality'] = $content_metadata['quality_score'] ?? 50;
-                $detection['licensing_potential'] = $valuation['licensing_potential']['potential'];
-                
-                $enhanced_detections[] = $detection;
-                
-                error_log("Plontis Stats: Calculated fresh value " . $valuation['estimated_value'] . " for detection " . $detection['id']);
-                
-            } catch (Exception $e) {
-                error_log("Plontis Stats: Error calculating value for detection " . $detection['id'] . ": " . $e->getMessage());
-                
-                // Use fallback but make it obvious
-                $detection['estimated_value'] = 0.00;
-                $detection['content_type'] = 'article';
-                $detection['content_quality'] = 50;
-                $detection['licensing_potential'] = 'low';
-                
-                $enhanced_detections[] = $detection;
-            }
-        }
-        
         // NOW calculate portfolio analysis using the enhanced detections
-        $portfolio_analysis = $this->value_calculator->calculatePortfolioValue($enhanced_detections);
+        $portfolio_analysis = $this->value_calculator->calculatePortfolioValue($detections);
         
         error_log("Plontis Stats: Portfolio analysis total value: " . $portfolio_analysis['total_portfolio_value']);
         
         // Get basic stats from enhanced detections
-        $total_bots = count($enhanced_detections);
-        $commercial_bots = count(array_filter($enhanced_detections, function($d) { return $d['commercial_risk']; }));
+        $total_bots = count($detections);
+        $commercial_bots = count(array_filter($detections, function($d) { return $d['commercial_risk']; }));
         
         // Get top company from enhanced detections
         $company_counts = [];
-        foreach ($enhanced_detections as $detection) {
+        foreach ($detections as $detection) {
             $company = $detection['company'] ?? 'Unknown';
             $company_counts[$company] = ($company_counts[$company] ?? 0) + 1;
         }
@@ -162,7 +137,7 @@ class Plontis_AJAX {
         $company_breakdown = [];
         $company_values = [];
         
-        foreach ($enhanced_detections as $detection) {
+        foreach ($detections as $detection) {
             $company = $detection['company'];
             if (!isset($company_values[$company])) {
                 $company_values[$company] = ['count' => 0, 'total_value' => 0];
@@ -192,12 +167,13 @@ class Plontis_AJAX {
             'portfolio_analysis' => $portfolio_analysis,
             'daily_activity' => $daily_activity,
             'company_breakdown' => $company_breakdown,
+            'is_demo_mode' => !$has_real_data,
             'licensing_opportunities' => count($portfolio_analysis['recommendations'] ?? []),
             'high_value_detections' => $portfolio_analysis['high_value_content_count'],
             'average_value_per_detection' => $portfolio_analysis['average_value_per_access'],
             '_debug' => [
                 'method' => 'fresh_calculation',
-                'detections_processed' => count($enhanced_detections),
+                'detections_processed' => count($detections),
                 'calculation_source' => 'enhanced_realtime'
             ]
         ]);
@@ -212,6 +188,8 @@ class Plontis_AJAX {
         
         global $wpdb;
         $table_name = $wpdb->prefix . 'plontis_detections';
+        
+
         
         // Check if table exists
         $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") == $table_name;
@@ -231,28 +209,43 @@ class Plontis_AJAX {
         $limit = intval($_POST['limit'] ?? 20);
         $offset = intval($_POST['offset'] ?? 0);
         
-        // Get raw detections - DON'T pull old estimated_value from database
-        $detections = $wpdb->get_results($wpdb->prepare(
-            "SELECT id, user_agent, ip_address, request_uri, bot_type, company, risk_level, confidence, commercial_risk, detected_at
-             FROM $table_name 
-             WHERE detected_at > DATE_SUB(NOW(), INTERVAL 30 DAY) 
-             ORDER BY detected_at DESC LIMIT %d OFFSET %d",
-            $limit, $offset
-        ), ARRAY_A);
+       // Check if we have ANY real detections
+        $real_count = $wpdb->get_var(
+            "SELECT COUNT(*) FROM $table_name WHERE (is_demo_data IS NULL OR is_demo_data = 0)"
+        );
+        $has_real_data = $real_count > 0;
         
-        // DEBUG: Log what we got from database
-        error_log("Plontis AJAX: Retrieved " . count($detections) . " detections from database");
+        // Get detections based on what's available
+        if ($has_real_data) {
+            // Show only real detections
+            $detections = $wpdb->get_results($wpdb->prepare(
+                "SELECT id, user_agent, ip_address, request_uri, bot_type, company, risk_level, confidence, commercial_risk, detected_at
+                FROM $table_name 
+                WHERE (is_demo_data IS NULL OR is_demo_data = 0)
+                AND detected_at > DATE_SUB(NOW(), INTERVAL 30 DAY) 
+                ORDER BY detected_at DESC LIMIT %d OFFSET %d",
+                $limit, $offset
+            ), ARRAY_A);
+        } else {
+            // Show demo data with clear indication
+            $detections = $wpdb->get_results($wpdb->prepare(
+                "SELECT id, user_agent, ip_address, request_uri, bot_type, company, risk_level, confidence, commercial_risk, detected_at
+                FROM $table_name 
+                ORDER BY detected_at DESC LIMIT %d OFFSET %d",
+                $limit, $offset
+            ), ARRAY_A);
+        }
         
-        // If no detections found, provide a helpful message
+        // If no detections found, provide helpful message
         if (empty($detections)) {
             wp_send_json_success([
-                'message' => 'No AI bot detections found in the last 30 days.',
+                'message' => 'No AI bot detections found.',
                 'detections' => [],
+                'is_demo_mode' => false,
                 'suggestions' => [
                     'Check that Plontis detection is enabled in settings',
-                    'Visit your site with a bot user agent to test detection: Mozilla/5.0 (compatible; GPTBot/1.0; +https://openai.com/gptbot)',
-                    'Ensure the plugin is properly activated',
-                    'Check that your site is publicly accessible to bots'
+                    'AI bots typically discover sites within 1-7 days',
+                    'Ensure your site is publicly accessible'
                 ]
             ]);
             return;
@@ -324,10 +317,12 @@ class Plontis_AJAX {
             }
         }
         
-        error_log("Plontis AJAX: Sending " . count($enhanced_detections) . " enhanced detections to frontend");
-        
-        // Send enhanced detections
-        wp_send_json_success($enhanced_detections);
+        wp_send_json_success([
+            'detections' => $enhanced_detections,
+            'is_demo_mode' => !$has_real_data,
+            'real_count' => $real_count,
+            'demo_message' => !$has_real_data ? 'Sample data shown to demonstrate features. Real AI bot detections will appear here once discovered.' : null
+        ]);
     }
 
     public function ajax_get_valuation_details() {

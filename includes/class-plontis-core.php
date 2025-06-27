@@ -37,7 +37,7 @@ class Plontis_Core {
             'patterns' => ['Meta-ExternalAgent', 'Meta-ExternalFetcher', 'FacebookBot'],
             'company' => 'Meta',
             'purpose' => 'AI Model Training',
-            'risk_level' => 'medium',
+            'risk_level' => 'high',
             'commercial' => true
         ],
         'Microsoft' => [
@@ -147,6 +147,7 @@ class Plontis_Core {
             licensing_potential varchar(20) DEFAULT 'low',
             value_breakdown text,
             market_context text,
+            is_demo_data tinyint(1) DEFAULT 0,
             detected_at datetime DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             KEY ip_address (ip_address),
@@ -154,15 +155,95 @@ class Plontis_Core {
             KEY bot_type (bot_type),
             KEY company (company),
             KEY estimated_value (estimated_value),
-            KEY licensing_potential (licensing_potential)
+            KEY licensing_potential (licensing_potential),
+            KEY is_demo_data (is_demo_data)
         ) $charset_collate;";
 
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         dbDelta($sql);
     }
 
+    /**
+    * Output debug messages to browser console
+    */
+    private function output_console_debug($messages) {
+        echo '<script>';
+        echo 'console.group("=== PLONTIS DATABASE DEBUG ===");';
+        foreach ($messages as $message) {
+            $safe_message = addslashes($message);
+            echo "console.log('$safe_message');";
+        }
+        echo 'console.groupEnd();';
+        echo '</script>';
+    }
+
+    /**
+    * Check if user has real detections
+    */
+    public function has_real_detections() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'plontis_detections';
+        
+        $real_count = $wpdb->get_var(
+            "SELECT COUNT(*) FROM $table_name WHERE (is_demo_data IS NULL OR is_demo_data = 0)"
+        );
+        
+        echo '<script>console.log("has_real_detections: found ' . $real_count . ' real detections");</script>';
+        return $real_count > 0;
+    }
+
+    /**
+    * Get real detections only
+    */
+    public function get_real_detections($limit = 20) {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'plontis_detections';
+        
+        $results = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $table_name 
+            WHERE (is_demo_data IS NULL OR is_demo_data = 0)
+            AND detected_at > DATE_SUB(NOW(), INTERVAL 30 DAY) 
+            ORDER BY detected_at DESC 
+            LIMIT %d",
+            $limit
+        ), ARRAY_A);
+        
+        echo '<script>console.log("get_real_detections: returning ' . count($results) . ' results");</script>';
+        return $results;
+    }
+
+    /**
+    * Get demo detections only
+    */
+    public function get_demo_detections() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'plontis_detections';
+        
+        return $wpdb->get_results(
+            "SELECT * FROM $table_name 
+            WHERE is_demo_data = 1
+            ORDER BY detected_at DESC",
+            ARRAY_A
+        );
+    }
+
+    /**
+    * Clear demo data
+    */
+    public function clear_demo_data() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'plontis_detections';
+        
+        $deleted = $wpdb->query("DELETE FROM $table_name WHERE is_demo_data = 1");
+        echo '<script>console.log("clear_demo_data: deleted ' . $deleted . ' demo records");</script>';
+        return $deleted;
+    }
+
     private function set_default_options() {
-        add_option('plontis_settings', [
+        // Check if this is a fresh install or update
+        $existing_settings = get_option('plontis_settings', null);
+        
+        $default_settings = [
             'enable_detection' => true,
             'enable_notifications' => true,
             'notification_email' => get_option('admin_email'),
@@ -171,8 +252,25 @@ class Plontis_Core {
             'enhanced_valuation' => true,
             'valuation_version' => '2.0',
             'high_value_threshold' => 50.00,
-            'licensing_notification_threshold' => 100.00
-        ]);
+            'licensing_notification_threshold' => 100.00,
+            
+            // Demo mode settings - smart defaults based on real data
+            'demo_mode' => false,  // You have real data, so default to live mode
+            'show_demo_notice' => false,
+            'first_install' => false,
+            'demo_disabled_at' => current_time('mysql'),
+            'real_detections_count' => $this->has_real_detections() ? 4 : 0
+        ];
+        
+        if ($existing_settings === null) {
+            // Fresh install
+            add_option('plontis_settings', $default_settings);
+            add_option('plontis_installed_at', current_time('mysql'));
+        } else {
+            // Update existing settings with new keys only
+            $updated_settings = array_merge($default_settings, $existing_settings);
+            update_option('plontis_settings', $updated_settings);
+        }
     }
 
     /**

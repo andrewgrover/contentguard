@@ -21,55 +21,54 @@ class PlontisValueCalculator {
     /**
      * Content type multipliers based on market research
      */
-    private $content_type_rates = [
-        // More conservative base rates
+   private $content_type_rates = [
         'article' => [
-            'base_rate' => 3.00,           // $3 base (was $25)
-            'word_rate' => 0.002,          // $2 per 1000 words (was $8)
-            'research_multiplier' => 2.5,  // Research worth more (was 3.5)
-            'news_multiplier' => 2.0,      // News content (was 2.8)
-            'evergreen_multiplier' => 1.5  // Evergreen content (was 2.2)
+            'base_rate' => 0.25,           // 25 cents base (was $3)
+            'word_rate' => 0.0001,         // 10 cents per 1000 words (was $2)
+            'research_multiplier' => 1.5,  // 50% bonus (was 2.5x)
+            'news_multiplier' => 1.3,      // 30% bonus (was 2x)
+            'evergreen_multiplier' => 1.2  // 20% bonus (was 1.5x)
         ],
         'image' => [
-            'base_rate' => 25.00,          // Keep image rates higher (Getty Images basis)
+            'base_rate' => 2.00,           // $2 base (was $25)
             'resolution_multiplier' => [
                 'low' => 0.6,
                 'medium' => 1.0,
-                'high' => 1.8,
-                'vector' => 2.5
+                'high' => 1.5,             // Reduced from 1.8
+                'vector' => 2.0            // Reduced from 2.5
             ],
-            'commercial_multiplier' => 2.0  // Reduced from 3.2
+            'commercial_multiplier' => 1.5 // Reduced from 2.0
         ],
         'video' => [
-            'base_rate' => 50.00,          // Reduced from $320
-            'duration_rate' => 5.00,       // $5 per minute (was $12.50)
+            'base_rate' => 10.00,          // $10 base (was $50)
+            'duration_rate' => 1.00,       // $1 per minute (was $5)
             'quality_multiplier' => [
                 '720p' => 0.8,
                 '1080p' => 1.0,
-                '4k' => 2.0,               // Reduced from 2.4
-                '8k' => 3.0                // Reduced from 4.2
+                '4k' => 1.5,               // Reduced from 2.0
+                '8k' => 2.0                // Reduced from 3.0
             ]
         ],
         'audio' => [
-            'base_rate' => 15.00,          // Reduced from $85
-            'duration_rate' => 2.00,       // $2 per minute (was $8.75)
-            'music_multiplier' => 1.5,     // Reduced from 1.8
-            'voice_multiplier' => 1.1      // Reduced from 1.2
+            'base_rate' => 3.00,           // $3 base (was $15)
+            'duration_rate' => 0.50,       // 50 cents per minute (was $2)
+            'music_multiplier' => 1.3,     // Reduced from 1.5
+            'voice_multiplier' => 1.1      // Same
         ],
         'code' => [
-            'base_rate' => 8.00,           // Reduced from $95
-            'line_rate' => 0.10,           // 10 cents per line (was 35 cents)
+            'base_rate' => 1.50,           // $1.50 base (was $8)
+            'line_rate' => 0.02,           // 2 cents per line (was 10 cents)
             'complexity_multiplier' => [
                 'basic' => 0.7,
                 'intermediate' => 1.0,
-                'advanced' => 1.8,         // Reduced from 2.1
-                'expert' => 2.5            // Reduced from 3.8
+                'advanced' => 1.5,         // Reduced from 1.8
+                'expert' => 2.0            // Reduced from 2.5
             ]
         ],
         'data' => [
-            'base_rate' => 2.00,           // Reduced from $15
-            'record_rate' => 0.01,         // 1 cent per record (was 5 cents)
-            'quality_multiplier' => 1.5    // Reduced from 2.4
+            'base_rate' => 0.50,           // 50 cents base (was $2)
+            'record_rate' => 0.001,        // 0.1 cent per record (was 1 cent)
+            'quality_multiplier' => 1.2    // Reduced from 1.5
         ]
     ];
 
@@ -77,62 +76,59 @@ class PlontisValueCalculator {
      * More realistic company multipliers
      */
     private $company_multipliers = [
-        // Tier 1: Major AI companies (but more realistic)
+        // Tier 1: Major AI companies (realistic multipliers)
         'OpenAI' => [
-            'multiplier' => 2.5,           // Reduced from 4.2
-            'base_value' => 8.00,          // Reduced from $45
+            'multiplier' => 1.8,           // 80% bonus (was 2.5x)
+            'base_value' => 1.50,          // $1.50 base (was $8)
             'reason' => 'ChatGPT commercial leader, premium licensing rates'
         ],
         'Anthropic' => [
-            'multiplier' => 2.2,           // Reduced from 3.8
-            'base_value' => 7.00,          // Reduced from $42
+            'multiplier' => 1.6,           // 60% bonus (was 2.2x)
+            'base_value' => 1.25,          // $1.25 base (was $7)
             'reason' => 'Claude enterprise focus, high-value use cases'
         ],
         'Google' => [
-            'multiplier' => 2.8,           // Reduced from 4.5
-            'base_value' => 9.00,          // Reduced from $48
+            'multiplier' => 1.9,           // 90% bonus (was 2.8x)
+            'base_value' => 1.75,          // $1.75 base (was $9)
             'reason' => 'Largest search/AI revenue, Bard/Gemini training'
         ],
         'Meta' => [
-            'multiplier' => 1.8,           // Reduced from 3.2
-            'base_value' => 5.00,          // Reduced from $35
+            'multiplier' => 1.4,           // 40% bonus (was 1.8x)
+            'base_value' => 1.00,          // $1 base (was $5)
             'reason' => 'Llama models, social media integration'
         ],
         
-        // Tier 2: Medium commercial risk (more realistic)
+        // Tier 2: Medium commercial risk (realistic)
         'Perplexity' => [
-            'multiplier' => 1.5,           // Reduced from 2.8
-            'base_value' => 4.00,          // Reduced from $28
+            'multiplier' => 1.3,           // 30% bonus (was 1.5x)
+            'base_value' => 0.75,          // 75 cents base (was $4)
             'reason' => 'AI search engine, growing user base'
         ],
         'Apple' => [
-            'multiplier' => 2.0,           // Reduced from 3.5
-            'base_value' => 6.00,          // Reduced from $38
+            'multiplier' => 1.5,           // 50% bonus (was 2.0x)
+            'base_value' => 1.25,          // $1.25 base (was $6)
             'reason' => 'iOS AI features, premium market'
         ],
         'Amazon' => [
-            'multiplier' => 1.6,           // Reduced from 3.1
-            'base_value' => 5.00,          // Reduced from $32
+            'multiplier' => 1.3,           // 30% bonus (was 1.6x)
+            'base_value' => 0.75,          // 75 cents base (was $5)
             'reason' => 'Alexa, AWS AI services'
         ],
         
         // Default for unknown companies
         'Unknown' => [
-            'multiplier' => 1.2,           // Reduced from 1.5
-            'base_value' => 2.00,          // Reduced from $15
+            'multiplier' => 1.0,           // No bonus (was 1.2x)
+            'base_value' => 0.50,          // 50 cents (was $2)
             'reason' => 'Unknown commercial intent'
         ]
     ];
 
-    /**
-     * More realistic market factors
-     */
     private $market_factors = [
-        'ai_market_growth' => 1.05,        // 5% growth factor (was 15%)
-        'content_scarcity' => 1.03,        // 3% scarcity premium (was 8%)
-        'legal_risk' => 1.04,              // 4% legal risk (was 12%)
-        'competition' => 1.02,             // 2% competition factor (was 6%)
-        'regulatory' => 1.01               // 1% regulatory (was 4%)
+        'ai_market_growth' => 1.02,        // 2% growth factor (was 5%)
+        'content_scarcity' => 1.01,        // 1% scarcity premium (was 3%)
+        'legal_risk' => 1.01,              // 1% legal risk (was 4%)
+        'competition' => 1.01,             // 1% competition factor (was 2%)
+        'regulatory' => 1.00               // No regulatory premium (was 1%)
     ];
 
 
@@ -140,30 +136,30 @@ class PlontisValueCalculator {
      * Content characteristics that affect value
      */
     private $content_characteristics = [
-        // Quality indicators
-        'original_research' => 2.8,
-        'exclusive_content' => 3.2,
-        'evergreen_content' => 1.8,
-        'trending_topic' => 2.1,
-        'technical_depth' => 2.4,
-        'multimedia_rich' => 1.9,
-        'high_engagement' => 2.2,
-        'authoritative_source' => 2.6,
+        // Quality indicators (reduced multipliers)
+        'original_research' => 1.8,        // Was 2.8
+        'exclusive_content' => 2.0,        // Was 3.2
+        'evergreen_content' => 1.3,        // Was 1.8
+        'trending_topic' => 1.5,           // Was 2.1
+        'technical_depth' => 1.6,          // Was 2.4
+        'multimedia_rich' => 1.4,          // Was 1.9
+        'high_engagement' => 1.5,          // Was 2.2
+        'authoritative_source' => 1.7,     // Was 2.6
         
-        // Content age factors
+        // Content age factors (same)
         'age_multipliers' => [
-            'days_0_30' => 1.0,      // Fresh content full value
-            'days_31_90' => 0.85,    // Recent content
-            'days_91_365' => 0.70,   // Older content
-            'days_366_plus' => 0.55  // Archive content
+            'days_0_30' => 1.0,
+            'days_31_90' => 0.85,
+            'days_91_365' => 0.70,
+            'days_366_plus' => 0.55
         ],
         
-        // Content length/depth
+        // Content length/depth (same)
         'length_multipliers' => [
-            'short' => 0.7,          // < 500 words
-            'medium' => 1.0,         // 500-2000 words
-            'long' => 1.4,           // 2000-5000 words
-            'comprehensive' => 1.8    // 5000+ words
+            'short' => 0.7,
+            'medium' => 1.0,
+            'long' => 1.4,
+            'comprehensive' => 1.8
         ]
     ];
 
@@ -201,35 +197,32 @@ class PlontisValueCalculator {
                           $market_multiplier * 
                           $confidence_multiplier * 
                           $risk_multiplier;
-        
-        $estimated_value = max(0.25, $estimated_value);  // Minimum 25 cents
-        $estimated_value = min($estimated_value, 150.00); // Maximum $150 (was $500)
-        
-        // Additional reality check for simple content
         $content_type = $content_metadata['content_type'] ?? 'article';
         $word_count = $content_metadata['word_count'] ?? 500;
-        
-        // Cap simple blog posts
-        if ($content_type === 'article' && $word_count < 1000) {
-            $estimated_value = min($estimated_value, 25.00); // Max $25 for short posts
-        }
-        
-        // Cap by content quality
+        $estimated_value = max(0.05, $estimated_value);  // Minimum 25 cents
+        $estimated_value = min($estimated_value, 150.00); // Maximum $150 (was $500)
         $quality_score = $content_metadata['quality_score'] ?? 50;
-        if ($quality_score < 60) {
-            $estimated_value = min($estimated_value, 26.00); // Max $15 for low quality
+        
+        // Apply realistic maximum caps
+        if ($content_type === 'article') {
+            if ($word_count < 500) {
+                $estimated_value = min($estimated_value, 2.00); // Max $2 for short posts
+            } elseif ($word_count < 1000) {
+                $estimated_value = min($estimated_value, 5.00); // Max $5 for medium posts
+            } else {
+                $estimated_value = min($estimated_value, 15.00); // Max $15 for long posts
+            }
+        } elseif ($content_type === 'image') {
+            $estimated_value = min($estimated_value, 10.00); // Max $10 for images
+        } elseif ($content_type === 'video') {
+            $estimated_value = min($estimated_value, 25.00); // Max $25 for videos
         }
         
-        // Debug logging
-        if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log("Plontis Value Calculation Debug:");
-            error_log("  Company: $company");
-            error_log("  Base Value: $base_value");
-            error_log("  Characteristic Multiplier: $characteristic_multiplier");
-            error_log("  Market Multiplier: $market_multiplier");
-            error_log("  Confidence Multiplier: $confidence_multiplier");
-            error_log("  Risk Multiplier: $risk_multiplier");
-            error_log("  Final Estimated Value: $estimated_value");
+        // Quality-based caps
+        if ($quality_score < 60) {
+            $estimated_value = min($estimated_value, 1.00); // Max $1 for low quality
+        } elseif ($quality_score < 80) {
+            $estimated_value = min($estimated_value, 5.00); // Max $5 for medium quality
         }
         
         return [

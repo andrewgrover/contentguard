@@ -239,6 +239,48 @@ class Plontis_Core {
         return $deleted;
     }
 
+    private function check_high_value_alert($valuation, $detection_data) {
+        $alert_enabled = get_option('plontis_value_alerts', false);
+        $threshold = get_option('plontis_alert_threshold', 100);
+        
+        if (!$alert_enabled || $valuation['estimated_value'] < $threshold) {
+            return;
+        }
+        
+        // Throttle alerts - only send once per hour for same company
+        $throttle_key = 'plontis_alert_' . $detection_data['company'];
+        if (get_transient($throttle_key)) {
+            return;
+        }
+        
+        $settings = get_option('plontis_settings');
+        $to = $settings['notification_email'] ?? get_option('admin_email');
+        $subject = "🚨 High-Value AI Bot Alert - {$detection_data['company']} - $" . number_format($valuation['estimated_value'], 2);
+        
+        $message = "PLONTIS HIGH-VALUE ALERT\n";
+        $message .= "========================\n\n";
+        $message .= "A high-value AI bot has been detected accessing your content:\n\n";
+        $message .= "Company: {$detection_data['company']}\n";
+        $message .= "Content Value: $" . number_format($valuation['estimated_value'], 2) . "\n";
+        $message .= "Page Accessed: {$detection_data['request_uri']}\n";
+        $message .= "Risk Level: {$detection_data['risk_level']}\n";
+        $message .= "Licensing Potential: {$valuation['licensing_potential']['potential']}\n";
+        $message .= "Detection Time: " . current_time('Y-m-d H:i:s') . "\n\n";
+        
+        $message .= "IMMEDIATE ACTION RECOMMENDED:\n";
+        $message .= "• Document this high-value access for licensing negotiations\n";
+        $message .= "• Consider reaching out to {$detection_data['company']} for licensing opportunities\n";
+        $message .= "• Review and optimize this content for increased AI training value\n\n";
+        
+        $message .= "View detailed analysis: " . admin_url('admin.php?page=plontis-valuation') . "\n";
+        $message .= "Start licensing: https://plontis.com\n";
+        
+        wp_mail($to, $subject, $message);
+        
+        // Set throttle for 1 hour
+        set_transient($throttle_key, true, HOUR_IN_SECONDS);
+    }
+
     private function set_default_options() {
         // Check if this is a fresh install or update
         $existing_settings = get_option('plontis_settings', null);
@@ -290,7 +332,7 @@ class Plontis_Core {
             [
                 'user_agent' => 'Mozilla/5.0 (compatible; GPTBot/1.0; +https://openai.com/gptbot)',
                 'ip_address' => '127.0.0.1',
-                'request_uri' => '/premium-tutorial-guide',
+                'request_uri' => '/this-is-fake',
                 'bot_type' => 'OpenAI',
                 'company' => 'OpenAI',
                 'risk_level' => 'high',
@@ -301,7 +343,7 @@ class Plontis_Core {
             [
                 'user_agent' => 'ClaudeBot/1.0',
                 'ip_address' => '127.0.0.2',
-                'request_uri' => '/research/ai-breakthrough-study',
+                'request_uri' => '/this-is-fake',
                 'bot_type' => 'Anthropic',
                 'company' => 'Anthropic',
                 'risk_level' => 'high',
@@ -312,7 +354,7 @@ class Plontis_Core {
             [
                 'user_agent' => 'Google-Extended/1.0',
                 'ip_address' => '127.0.0.3',
-                'request_uri' => '/technical/machine-learning-implementation',
+                'request_uri' => '/this-is-fake/demo',
                 'bot_type' => 'Google',
                 'company' => 'Google',
                 'risk_level' => 'high',
@@ -347,6 +389,7 @@ class Plontis_Core {
             $data['value_breakdown'] = json_encode($valuation['breakdown']);
             $data['licensing_potential'] = $valuation['licensing_potential']['potential'];
             $data['market_context'] = json_encode($valuation['market_context']);
+            $data['is_demo'] = 1;
             
             $wpdb->insert($table_name, $data);
         }
@@ -401,6 +444,8 @@ class Plontis_Core {
         ]);
         
         $valuation = $this->value_calculator->calculateContentValue($detection_data, $content_metadata);
+
+        $this->check_high_value_alert($valuation, $detection_data);
         
         // Insert enhanced detection record
         $wpdb->insert(

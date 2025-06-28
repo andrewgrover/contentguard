@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name: Plontis - AI Bot Detection (Enhanced)
- * Plugin URI: https://plontis.ai
+ * Plugin Name: Plontis - AI Bot Detection
+ * Plugin URI: https://plontis.com
  * Description: Detect and track AI bots scraping your content with industry-accurate valuation.
- * Version: 2.0.0
+ * Version: 1.0.3
  * Author: Plontis
  * License: GPL v2 or later
  * Text Domain: plontis
@@ -173,8 +173,9 @@ if (in_array('includes/class-plontis-core.php', $successful_includes) &&
         }
 
         public function activate() {
-            // Simple activation - create table
             global $wpdb;
+            
+            // Create Plontis detection table
             $table_name = $wpdb->prefix . 'plontis_detections';
             $charset_collate = $wpdb->get_charset_collate();
 
@@ -203,13 +204,24 @@ if (in_array('includes/class-plontis-core.php', $successful_includes) &&
             require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
             dbDelta($sql);
             
-            // Add some sample data if table is empty
+            // Set default settings if they don't exist
+            if (!get_option('plontis_settings')) {
+                $default_settings = [
+                    'enable_detection' => true,
+                    'enable_notifications' => true,
+                    'notification_email' => get_option('admin_email'),
+                    'log_retention_days' => 90,
+                    'track_legitimate_bots' => false,
+                    'high_value_threshold' => 50.00,
+                    'licensing_notification_threshold' => 100.00
+                ];
+                update_option('plontis_settings', $default_settings);
+            }
+            
+            // Add sample data if table is empty (for demo purposes)
             $count = $wpdb->get_var("SELECT COUNT(*) FROM $table_name");
-            if ($count == 0 && class_exists('Plontis_Core')) {
-                $core = new Plontis_Core();
-                if (method_exists($core, 'add_enhanced_sample_data')) {
-                    $core->add_enhanced_sample_data();
-                }
+            if ($count == 0) {
+                $this->add_sample_data($table_name);
             }
         }
 

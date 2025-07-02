@@ -446,7 +446,7 @@ class Plontis_Core {
         $valuation = $this->value_calculator->calculateContentValue($detection_data, $content_metadata);
 
         $this->check_high_value_alert($valuation, $detection_data);
-        
+       
         // Insert enhanced detection record
         $wpdb->insert(
             $table_name,
@@ -471,6 +471,11 @@ class Plontis_Core {
             ]
         );
         
+        do_action('plontis_detection_logged', 
+            array_merge($detection, ['request_uri' => $request_uri]), 
+            $content_metadata, 
+            $valuation
+        );
         return $valuation;
     }
 

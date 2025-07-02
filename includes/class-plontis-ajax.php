@@ -179,6 +179,27 @@ class Plontis_AJAX {
         ]);
     }
 
+    public function ajax_export_status() {
+        if (!check_ajax_referer('plontis_nonce', 'nonce', false)) {
+            wp_send_json_error('Security check failed');
+        }
+        
+        $export_id = sanitize_text_field($_POST['export_id'] ?? '');
+        
+        // Check export status (you could implement a queue system)
+        $status = get_transient('plontis_export_' . $export_id);
+        
+        if ($status) {
+            wp_send_json_success([
+                'status' => $status['status'],
+                'progress' => $status['progress'],
+                'download_url' => $status['download_url'] ?? null
+            ]);
+        } else {
+            wp_send_json_error('Export not found');
+        }
+    }
+
     public function ajax_get_detections() {
         // Better nonce handling
         if (!check_ajax_referer('plontis_nonce', 'nonce', false)) {

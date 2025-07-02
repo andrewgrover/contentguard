@@ -88,7 +88,9 @@ $files_to_test = [
     'includes/class-plontis-ajax.php',
     'includes/class-plontis-api.php',
     'includes/class-plontis-widgets.php',
-    'includes/class-plontis-cli.php'
+    'includes/class-plontis-cli.php',
+    'includes/class-plontis-central-api.php',
+    'includes/class-plontis-admin-api.php'
 ];
 
 $successful_includes = [];
@@ -161,6 +163,11 @@ if (in_array('includes/class-plontis-core.php', $successful_includes) &&
                     $this->widgets->init();
                     error_log("Plontis: Widgets initialized");
                 }
+
+                if (class_exists('Plontis_Admin_API')) {
+                    $api_admin = new Plontis_Admin_API();
+                    $api_admin->init();
+                }
                 
                 error_log("Plontis: Plugin initialization completed successfully");
                 
@@ -204,17 +211,26 @@ if (in_array('includes/class-plontis-core.php', $successful_includes) &&
             require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
             dbDelta($sql);
             
-            // Set default settings if they don't exist
-            if (!get_option('plontis_settings')) {
-                $default_settings = [
-                    'enable_detection' => true,
-                    'enable_notifications' => true,
-                    'notification_email' => get_option('admin_email'),
-                    'log_retention_days' => 90,
-                    'track_legitimate_bots' => false,
-                    'high_value_threshold' => 50.00,
-                    'licensing_notification_threshold' => 100.00
-                ];
+            $current_settings = get_option('plontis_settings');
+    
+            $default_settings = [
+                // Your existing settings
+                'enable_detection' => true,
+                'enable_notifications' => true,
+                'notification_email' => get_option('admin_email'),
+                'log_retention_days' => 90,
+                'track_legitimate_bots' => false,
+                'high_value_threshold' => 50.00,
+                'licensing_notification_threshold' => 100.00,
+                'central_api_key' => '',
+                'enable_central_reporting' => true,
+            ];
+            
+            // Merge with existing settings (preserves user configuration)
+            if ($current_settings) {
+                $merged_settings = array_merge($default_settings, $current_settings);
+                update_option('plontis_settings', $merged_settings);
+            } else {
                 update_option('plontis_settings', $default_settings);
             }
             

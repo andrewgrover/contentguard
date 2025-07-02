@@ -30,6 +30,7 @@ class Plontis_Admin {
         // Dashboard widget
         add_action('wp_dashboard_setup', [$this, 'add_dashboard_widget']);
         add_action('admin_init', [$this, 'handle_report_actions']);
+        add_action('admin_notices', [$this, 'show_test_api_key']);
     }
 
     public function admin_scripts($hook) {
@@ -189,7 +190,7 @@ class Plontis_Admin {
         }
         
         $message .= "\nView detailed report: " . admin_url('admin.php?page=plontis-valuation') . "\n";
-        $message .= "Join Plontis platform: https://plontis.ai/licensing\n";
+        $message .= "Join Plontis platform: https://plontis.com\n";
         
         wp_mail($email, $subject, $message);
     }
@@ -210,15 +211,6 @@ class Plontis_Admin {
             'dashicons-shield-alt',
             30
         );
-
-        add_submenu_page(
-            'plontis',
-            'Settings',
-            'Settings',
-            'manage_options',
-            'plontis-settings',
-            [$this, 'settings_page']
-        );
         
         add_submenu_page(
             'plontis',
@@ -227,6 +219,15 @@ class Plontis_Admin {
             'manage_options',
             'plontis-valuation',
             [$this, 'valuation_page']
+        );
+
+         add_submenu_page(
+            'plontis',
+            'Settings',
+            'Settings',
+            'manage_options',
+            'plontis-settings',
+            [$this, 'settings_page']
         );
         /* Will fully implement at a later date, functionality not finished yet
         add_submenu_page(
@@ -376,6 +377,22 @@ class Plontis_Admin {
                     <?php submit_button('Save Subscription Settings'); ?>
                 </form>
             </div>
+        </div>
+        <?php
+    }
+
+    public function show_test_api_key() {
+        if (!current_user_can('manage_options')) return;
+        
+        $site_url = get_site_url();
+        $domain = parse_url($site_url, PHP_URL_HOST);
+        $test_key = 'test_' . hash('sha256', $domain . '_plontis_test');
+        $test_key = substr($test_key, 0, 32);
+        
+        ?>
+        <div class="notice notice-info is-dismissible">
+            <p><strong>Plontis Test API Key:</strong> <code><?php echo esc_html($test_key); ?></code></p>
+            <p>Use this key to test the Central API connection.</p>
         </div>
         <?php
     }
@@ -698,7 +715,9 @@ class Plontis_Admin {
                 'enhanced_valuation' => isset($_POST['enhanced_valuation']),
                 'valuation_version' => '2.0',
                 'high_value_threshold' => floatval($_POST['high_value_threshold'] ?? 50.00),
-                'licensing_notification_threshold' => floatval($_POST['licensing_notification_threshold'] ?? 100.00)
+                'licensing_notification_threshold' => floatval($_POST['licensing_notification_threshold'] ?? 100.00),
+                'central_api_key' => sanitize_text_field($_POST['central_api_key'] ?? ''),
+                'enable_central_reporting' => isset($_POST['enable_central_reporting'])
             ];
             update_option('plontis_settings', $settings);
             echo '<div class="notice notice-success"><p>Enhanced settings saved!</p></div>';
@@ -776,6 +795,12 @@ class Plontis_Admin {
                         </td>
                     </tr>
                 </table>
+
+                <h2>Central API Settings</h2>
+                <?php 
+                $api_admin = new Plontis_Admin_API();
+                $api_admin->render_api_settings_form(); 
+                ?>
                 
                 <?php submit_button('Save Enhanced Settings'); ?>
             </form>
@@ -875,6 +900,8 @@ class Plontis_Admin {
                     'avg_session_value' => 0,
                     'preferred_times' => [],
                     'content_quality_focus' => 0,
+                    'system_file_accesses' => 0, // Track system file access
+                    'content_accesses' => 0,     // Track actual content access
                     'pages_accessed' => []
                 ];
             }
@@ -883,20 +910,38 @@ class Plontis_Admin {
             $company_strategies[$company]['total_value'] += $detection['estimated_value'];
             $company_strategies[$company]['content_types'][] = $content_type;
             $company_strategies[$company]['preferred_times'][] = $hour;
-            $company_strategies[$company]['content_quality_focus'] += ($detection['content_quality'] ?? 50);
             $company_strategies[$company]['pages_accessed'][] = $detection['request_uri'];
+            
+            // Separate system file access from content access for quality calculation
+            if ($content_type === 'system_file') {
+                $company_strategies[$company]['system_file_accesses']++;
+                // Don't include system files in quality focus calculation
+            } else {
+                $company_strategies[$company]['content_accesses']++;
+                $content_quality = $detection['content_quality'] ?? 50;
+                $company_strategies[$company]['content_quality_focus'] += $content_quality;
+            }
         }
         
         // Process company data
         foreach ($company_strategies as $company => &$data) {
             $data['avg_session_value'] = $data['total_value'] / max(1, $data['total_accesses']);
-            $data['avg_quality_focus'] = $data['content_quality_focus'] / max(1, $data['total_accesses']);
+            
+            // Calculate quality focus ONLY from actual content, not system files
+            $content_access_count = max(1, $data['content_accesses']);
+            $data['avg_quality_focus'] = $data['content_quality_focus'] / $content_access_count;
+            
+            // Add system file access ratio for analysis
+            $data['system_file_ratio'] = $data['system_file_accesses'] / max(1, $data['total_accesses']);
+            
             $data['content_type_preference'] = array_count_values($data['content_types']);
             $data['time_preference'] = array_count_values($data['preferred_times']);
             $data['unique_pages'] = count(array_unique($data['pages_accessed']));
             
-            // Determine strategy
-            if ($data['avg_quality_focus'] > 80) {
+            // Determine strategy - account for system file behavior
+            if ($data['system_file_ratio'] > 0.5) {
+                $data['strategy'] = 'Site Discovery & Mapping';
+            } elseif ($data['avg_quality_focus'] > 80) {
                 $data['strategy'] = 'Premium Content Focus';
             } elseif ($data['unique_pages'] > 10) {
                 $data['strategy'] = 'Broad Content Harvesting';
@@ -915,52 +960,120 @@ class Plontis_Admin {
         return $company_strategies;
     }
 
+
     /**
     * 3. Revenue Forecasting
     */
     private function getRevenueForecasting($enhanced_detections) {
         $daily_values = [];
         $seasonal_patterns = [];
+        $weekly_patterns = [];
         
         foreach ($enhanced_detections as $detection) {
             $date = date('Y-m-d', strtotime($detection['detected_at']));
             $month = date('m', strtotime($detection['detected_at']));
+            $week = date('W', strtotime($detection['detected_at']));
             
             $daily_values[$date] = ($daily_values[$date] ?? 0) + $detection['estimated_value'];
             $seasonal_patterns[$month] = ($seasonal_patterns[$month] ?? 0) + $detection['estimated_value'];
+            $weekly_patterns[$week] = ($weekly_patterns[$week] ?? 0) + $detection['estimated_value'];
         }
         
-        // Calculate growth trends
+        // Calculate meaningful growth trends
         ksort($daily_values);
         $values = array_values($daily_values);
+        $growth_rate = 0;
+        $trend_description = 'Stable';
         
-        if (count($values) >= 7) {
+        if (count($values) >= 14) {
+            // Compare last 7 days to previous 7 days
             $recent_week = array_slice($values, -7);
             $previous_week = array_slice($values, -14, 7);
             
             $recent_avg = array_sum($recent_week) / 7;
-            $previous_avg = count($previous_week) > 0 ? array_sum($previous_week) / count($previous_week) : $recent_avg;
+            $previous_avg = array_sum($previous_week) / 7;
             
-            $growth_rate = $previous_avg > 0 ? (($recent_avg - $previous_avg) / $previous_avg) * 100 : 0;
+            if ($previous_avg > 0) {
+                $growth_rate = (($recent_avg - $previous_avg) / $previous_avg) * 100;
+                
+                if ($growth_rate > 10) {
+                    $trend_description = 'Strong Growth';
+                } elseif ($growth_rate > 5) {
+                    $trend_description = 'Growing';
+                } elseif ($growth_rate < -10) {
+                    $trend_description = 'Declining';
+                } elseif ($growth_rate < -5) {
+                    $trend_description = 'Slight Decline';
+                } else {
+                    $trend_description = 'Stable';
+                }
+            }
+        } elseif (count($values) >= 7) {
+            // For shorter periods, just show if increasing or decreasing
+            $first_half = array_slice($values, 0, ceil(count($values)/2));
+            $second_half = array_slice($values, -floor(count($values)/2));
+            
+            $first_avg = array_sum($first_half) / count($first_half);
+            $second_avg = array_sum($second_half) / count($second_half);
+            
+            if ($second_avg > $first_avg * 1.1) {
+                $trend_description = 'Growing';
+                $growth_rate = 15; // Approximate
+            } elseif ($second_avg < $first_avg * 0.9) {
+                $trend_description = 'Declining';
+                $growth_rate = -15; // Approximate
+            }
         } else {
+            $trend_description = 'Insufficient Data';
             $growth_rate = 0;
-            $recent_avg = count($values) > 0 ? array_sum($values) / count($values) : 0;
         }
         
-        // Revenue projections
-        $projections = [
-            'daily_average' => $recent_avg * .1,
-            'weekly_projection' => $recent_avg * 7 * .1,
-            'monthly_projection' => $recent_avg * 30 * .1,
-            'annual_projection' => $recent_avg * 365 * .1,
-            'growth_rate' => $growth_rate
-        ];
+        // Calculate more realistic projections
+        $total_value = array_sum($values);
+        $days_of_data = count($values);
         
-        // Conservative vs optimistic scenarios
-        $projections['conservative_annual'] = $projections['annual_projection'] * 0.7; // 70% of current rate
-        $projections['optimistic_annual'] = $projections['annual_projection'] * 1.5;   // 150% with growth
+        if ($days_of_data > 0) {
+            $daily_average = $total_value / $days_of_data;
+            
+            // Apply realistic licensing conversion rates (most content doesn't get licensed)
+            $licensing_conversion_rate = 0.15; // 15% of detected value might become actual licensing revenue
+            
+            $projections = [
+                'daily_average' => $daily_average * $licensing_conversion_rate,
+                'weekly_projection' => $daily_average * 7 * $licensing_conversion_rate,
+                'monthly_projection' => $daily_average * 30 * $licensing_conversion_rate,
+                'annual_projection' => $daily_average * 365 * $licensing_conversion_rate,
+                'growth_rate' => $growth_rate
+            ];
+        } else {
+            $projections = [
+                'daily_average' => 0,
+                'weekly_projection' => 0,
+                'monthly_projection' => 0,
+                'annual_projection' => 0,
+                'growth_rate' => 0
+            ];
+        }
         
-        $peak_season = !empty($seasonal_patterns) ? array_search(max($seasonal_patterns), $seasonal_patterns) : date('m');
+        // More realistic scenario analysis
+        $base_annual = $projections['annual_projection'];
+        $projections['conservative_annual'] = $base_annual * 0.5; // Much more conservative
+        $projections['optimistic_annual'] = $base_annual * 2.0;   // Assumes good licensing success
+        
+        // Improved peak season analysis
+        $peak_season_name = 'N/A';
+        $peak_season_explanation = 'Not enough data to determine seasonal patterns';
+        
+        if (!empty($seasonal_patterns) && count($seasonal_patterns) >= 3) {
+            $peak_month = array_search(max($seasonal_patterns), $seasonal_patterns);
+            $month_names = [
+                '01' => 'January', '02' => 'February', '03' => 'March', '04' => 'April',
+                '05' => 'May', '06' => 'June', '07' => 'July', '08' => 'August',
+                '09' => 'September', '10' => 'October', '11' => 'November', '12' => 'December'
+            ];
+            $peak_season_name = $month_names[str_pad($peak_month, 2, '0', STR_PAD_LEFT)] ?? 'Unknown';
+            $peak_season_explanation = "Based on current data, {$peak_season_name} shows highest AI bot activity";
+        }
         
         return [
             'daily_values' => $daily_values,
@@ -968,8 +1081,11 @@ class Plontis_Admin {
             'projections' => $projections,
             'trends' => [
                 'growth_rate' => $growth_rate,
-                'trend_direction' => $growth_rate > 5 ? 'Growing' : ($growth_rate < -5 ? 'Declining' : 'Stable'),
-                'peak_season' => $peak_season
+                'trend_direction' => $trend_description,
+                'peak_season' => $peak_season_name,
+                'peak_season_explanation' => $peak_season_explanation,
+                'data_confidence' => $days_of_data >= 30 ? 'High' : ($days_of_data >= 14 ? 'Medium' : 'Low'),
+                'licensing_note' => 'Projections assume 15% licensing conversion rate based on industry averages'
             ]
         ];
     }
@@ -981,73 +1097,96 @@ class Plontis_Admin {
         $recommendations = [];
         $total_value = $portfolio_analysis['total_portfolio_value'];
         
-        // Tier-based recommendations
-        if ($total_value > 50000) {
+        // More realistic tier thresholds and revenue expectations
+        if ($total_value > 10000) {
             $recommendations[] = [
                 'category' => 'Enterprise Direct Licensing',
                 'priority' => 'High',
-                'description' => 'Your portfolio value justifies direct enterprise negotiations with major AI companies.',
+                'description' => 'Your high-value portfolio justifies direct outreach to AI companies for licensing deals.',
                 'action_items' => [
-                    'Compile comprehensive usage reports for top 3 AI companies accessing your content',
-                    'Engage intellectual property attorney specializing in AI licensing',
-                    'Prepare enterprise licensing packages targeting $100K+ annual deals',
-                    'Document all training data usage patterns for legal leverage in negotiations'
+                    'Document your top 10 most valuable pages with access patterns and content quality metrics',
+                    'Research AI companies that have accessed your content and their existing licensing deals',
+                    'Prepare a licensing proposal with tiered pricing: $5,000-$50,000 annual for content access',
+                    'Contact business development teams at OpenAI, Anthropic, Google, and Meta'
                 ],
-                'potential_revenue' => $total_value * 0.4, // 40% licensing rate for enterprise
-                'timeline' => '3-6 months'
+                'potential_revenue' => min($total_value * 0.20, 25000), // Cap at $25K to be realistic
+                'timeline' => '3-6 months',
+                'success_probability' => 'Medium (30-50%)',
+                'next_action' => 'Create licensing proposal document'
             ];
         }
         
-        if ($total_value > 10000) {
+        if ($total_value > 2500) {
             $recommendations[] = [
-                'category' => 'Platform-Based Licensing',
-                'priority' => 'Medium',
-                'description' => 'Join AI training data marketplaces for automated licensing revenue streams.',
+                'category' => 'Content Marketplace Licensing',
+                'priority' => 'Medium', 
+                'description' => 'Join AI training data marketplaces for automated, smaller-scale licensing revenue.',
                 'action_items' => [
-                    'Register with Plontis licensing platform and other AI data marketplaces',
-                    'Set up automated content feeds with quality scoring',
-                    'Configure dynamic pricing based on content quality metrics and demand',
-                    'Monitor competitive pricing and adjust rates quarterly'
+                    'Register with Plontis licensing platform and similar services',
+                    'Set up RSS feeds or API access for your highest-quality content',
+                    'Price content at $0.10-$2.00 per access based on quality and uniqueness',
+                    'Monitor performance and adjust pricing monthly'
                 ],
-                'potential_revenue' => $total_value * 0.2, // 20% platform licensing rate
-                'timeline' => '1-2 months'
+                'potential_revenue' => min($total_value * 0.10, 5000), // Cap at $5K annually
+                'timeline' => '1-2 months',
+                'success_probability' => 'High (70-90%)',
+                'next_action' => 'Research and join 2-3 content marketplaces'
             ];
         }
         
-        // Company-specific strategies
+        // Company-specific strategies only for significant value
         foreach ($competitive_intel as $company => $strategy) {
-            if ($strategy['total_value'] > 5000) {
+            if ($strategy['total_value'] > 1000) {
                 $recommendations[] = [
-                    'category' => "Direct Outreach - {$company}",
-                    'priority' => $strategy['total_value'] > 15000 ? 'High' : 'Medium',
-                    'description' => "Targeted licensing approach for {$company} based on their documented usage patterns and content preferences.",
+                    'category' => "Targeted Outreach - {$company}",
+                    'priority' => $strategy['total_value'] > 5000 ? 'High' : 'Medium',
+                    'description' => "{$company} has accessed \${$strategy['total_value']} worth of your content. Their {$strategy['strategy']} approach suggests licensing opportunity.",
                     'action_items' => [
-                        "Document {$company}'s specific content usage patterns and peak access times",
-                        "Research {$company}'s existing licensing deals and partnership models",
-                        "Prepare content portfolio specifically valuable to {$company}'s AI training needs",
-                        "Initiate contact through business development channels or licensing intermediaries"
+                        "Research {$company}'s content licensing team and recent deals (check press releases)",
+                        "Prepare usage report: {$strategy['total_accesses']} accesses across {$strategy['unique_pages']} pages",
+                        "Calculate licensing proposal: {$strategy['avg_session_value']} average value per session",
+                        "Send initial inquiry via official business channels or LinkedIn"
                     ],
-                    'potential_revenue' => $strategy['total_value'] * 0.3,
+                    'potential_revenue' => min($strategy['total_value'] * 0.25, 15000), // Realistic cap
                     'timeline' => '2-4 months',
-                    'strategy_insight' => $strategy['strategy']
+                    'success_probability' => $strategy['total_value'] > 5000 ? 'Medium (40%)' : 'Low (20%)',
+                    'next_action' => "Find {$company} business development contact"
                 ];
             }
         }
         
-        // Content optimization recommendations
+        // Always include content optimization (most actionable)
         $recommendations[] = [
             'category' => 'Content Value Optimization',
             'priority' => 'Ongoing',
-            'description' => 'Increase your content\'s licensing value through strategic improvements and AI-focused optimization.',
+            'description' => 'Increase your content\'s AI training value and licensing appeal through strategic improvements.',
             'action_items' => [
-                'Focus on high-value content types (research papers, technical documentation, original analysis)',
-                'Improve content quality scores through better structure, depth, and multimedia integration',
-                'Add interactive elements and data visualizations to increase per-access value',
-                'Create exclusive, original research content that AI companies cannot find elsewhere',
-                'Implement content freshness strategies to maintain high relevance scores'
+                'Focus on creating original research, data analysis, and technical tutorials (highest AI value)',
+                'Add structured data markup to help AI systems better understand your content',
+                'Create content series and topic clusters to increase your authority in specific domains',
+                'Improve content quality scores: aim for 1,500+ words, multiple sections, data/examples'
             ],
-            'potential_revenue' => $total_value * 0.25, // 25% value increase through optimization
-            'timeline' => 'Ongoing'
+            'potential_revenue' => min($total_value * 0.30, 10000), // 30% improvement is realistic
+            'timeline' => 'Ongoing (3-6 months to see results)',
+            'success_probability' => 'High (80%+)',
+            'next_action' => 'Audit your top 10 pages and identify optimization opportunities'
+        ];
+        
+        // Add realistic expectations note
+        $recommendations[] = [
+            'category' => 'Realistic Expectations',
+            'priority' => 'Important',
+            'description' => 'Content licensing is emerging but competitive. Most creators earn $100-$5,000 annually.',
+            'action_items' => [
+                'Set realistic expectations: start with small wins and build relationships',
+                'Track your metrics monthly and adjust strategies based on what works',
+                'Join creator communities and forums to learn from others\' licensing experiences',
+                'Consider this as supplementary income, not primary revenue'
+            ],
+            'potential_revenue' => 'Variable',
+            'timeline' => 'Ongoing',
+            'success_probability' => 'Depends on execution',
+            'next_action' => 'Set monthly goals and tracking metrics'
         ];
         
         return $recommendations;
@@ -1340,7 +1479,7 @@ class Plontis_Admin {
         fputcsv($output, ['Plontis Enhanced Valuation Report']);
         fputcsv($output, ['Generated: ' . date('Y-m-d H:i:s')]);
         fputcsv($output, ['Total Portfolio Value: $' . number_format($portfolio_analysis['total_portfolio_value'], 2)]);
-        fputcsv($output, ['Annual Revenue Projection: $' . number_format($portfolio_analysis['estimated_annual_revenue'], 2)]);
+        fputcsv($output, ['Portfolio Value Projection: $' . number_format($portfolio_analysis['estimated_annual_revenue'], 2)]);
         fputcsv($output, []);
         
         // Headers for detection data
@@ -1604,500 +1743,326 @@ class Plontis_Admin {
         $industry_benchmarks = $this->getIndustryBenchmarking($portfolio_analysis);
         
         ?>
-        <div class="wrap plontis-admin">
-            <div class="plontis-header">
-                <div class="plontis-logo">
-                    <div class="plontis-icon"></div>
-                    <h1 class="plontis-title">PLONTIS</h1>
-                </div>
-                <span class="plontis-subtitle">Enhanced Valuation Report</span>
-            </div>
-            
-            <!-- Time Range Selector -->
-            <div class="plontis-panel">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h2 style="margin: 0;">Portfolio Analysis - Last <?php echo $days; ?> Days</h2>
-                    <div class="time-range-selector">
-                        <select onchange="window.location.href='?page=plontis-valuation&days=' + this.value">
-                            <option value="7" <?php selected($days, 7); ?>>Last 7 Days</option>
-                            <option value="30" <?php selected($days, 30); ?>>Last 30 Days</option>
-                            <option value="90" <?php selected($days, 90); ?>>Last 90 Days</option>
-                            <option value="180" <?php selected($days, 180); ?>>Last 6 Months</option>
-                            <option value="365" <?php selected($days, 365); ?>>Last Year</option>
-                        </select>
-                     </div>
-                </div>
-                
-                <!-- Executive Summary -->
-                <div class="executive-summary">
-                    <div class="summary-stats">
-                        <div class="summary-stat">
-                            <h3>Total Portfolio Value</h3>
-                            <div class="stat-value">$<?php echo number_format($portfolio_analysis['total_portfolio_value'], 2); ?></div>
-                            <div class="stat-change <?php echo $revenue_forecasting['trends']['growth_rate'] > 0 ? 'positive' : 'negative'; ?>">
-                                <?php echo $revenue_forecasting['trends']['trend_direction']; ?> 
-                                (<?php echo number_format(abs($revenue_forecasting['trends']['growth_rate']), 1); ?>%)
-                            </div>
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Plontis Enhanced Valuation Report</title>
+            </head>
+            <body>
+                <div class="wrap plontis-admin">
+                    <div class="plontis-header">
+                        <div class="plontis-logo">
+                            <div class="plontis-icon"></div>
+                            <h1 class="plontis-title">PLONTIS</h1>
                         </div>
-                        <div class="summary-stat">
-                            <h3>Annual Revenue Projection</h3>
-                            <div class="stat-value">$<?php echo number_format($revenue_forecasting['projections']['annual_projection'], 2); ?></div>
-                            <div class="stat-range">
-                                $<?php echo number_format($revenue_forecasting['projections']['conservative_annual'], 2); ?> - 
-                                $<?php echo number_format($revenue_forecasting['projections']['optimistic_annual'], 2); ?>
-                            </div>
-                        </div>
-                        <div class="summary-stat">
-                            <h3>Industry Ranking</h3>
-                            <div class="stat-value"><?php echo ucfirst(str_replace('_', ' ', $industry_benchmarks['category'])); ?></div>
-                            <div class="stat-change"><?php echo $industry_benchmarks['percentile']; ?></div>
-                        </div>
-                        <div class="summary-stat">
-                            <h3>High-Value Opportunities</h3>
-                            <div class="stat-value"><?php echo $portfolio_analysis['licensing_candidates']; ?></div>
-                            <div class="stat-change">Ready for licensing</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="plontis-export-controls" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef;">
-                <h3 style="margin: 0 0 15px 0; font-size: 16px;">📊 Export Report</h3>
-                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                    <span style="color: #6c757d; font-size: 14px;">Export this report in:</span>
-                    
-                    <a href="<?php echo wp_nonce_url(admin_url('admin.php?page=plontis-valuation&plontis_export=1&format=html&days=' . $days), 'plontis_export', 'nonce'); ?>" 
-                    class="button" target="_blank">
-                    📄 HTML Report
-                    </a>
-                    
-                    <a href="<?php echo wp_nonce_url(admin_url('admin.php?page=plontis-valuation&plontis_export=1&format=csv&days=' . $days), 'plontis_export', 'nonce'); ?>" 
-                    class="button">
-                    📊 CSV Data
-                    </a>
-                    
-                    <a href="<?php echo wp_nonce_url(admin_url('admin.php?page=plontis-valuation&plontis_export=1&format=json&days=' . $days), 'plontis_export', 'nonce'); ?>" 
-                    class="button">
-                    🔗 JSON
-                    </a>
-                    
-                    <span style="color: #6c757d; font-size: 12px; margin-left: 10px;">
-                        Reports include all <?php echo count($enhanced_detections); ?> detections from the last <?php echo $days; ?> days
-                    </span>
-                </div>
-            </div>
-
-            <!-- Content Performance Analytics -->
-            <div class="plontis-panel">
-                <h2>📊 Content Performance Analytics</h2>
-                
-                <div class="analytics-grid">
-                    <!-- Top Performing Pages -->
-                    <div class="analytics-card">
-                        <h3>Top Revenue-Generating Pages</h3>
-                        <div class="performance-list">
-                            <?php foreach (array_slice($performance_analytics['page_analytics'], 0, 10) as $page => $data): ?>
-                                <div class="performance-item">
-                                    <div class="page-info">
-                                        <div class="page-url"><?php echo esc_html(substr($page, 0, 50)) . (strlen($page) > 50 ? '...' : ''); ?></div>
-                                        <div class="page-stats">
-                                            $<?php echo number_format($data['total_value'], 2); ?> 
-                                            (<?php echo $data['access_count']; ?> accesses, 
-                                            <?php echo $data['company_count']; ?> companies)
-                                        </div>
-                                    </div>
-                                    <div class="page-value">$<?php echo number_format($data['avg_value_per_access'], 2); ?>/access</div>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
+                        <span class="plontis-subtitle">Enhanced Valuation Report</span>
                     </div>
                     
-                    <!-- Content Type Revenue -->
-                    <div class="analytics-card">
-                        <h3>Revenue by Content Type</h3>
-                        <div class="content-type-chart">
-                            <?php 
-                            $total_content_revenue = array_sum($performance_analytics['content_type_revenue']);
-                            foreach ($performance_analytics['content_type_revenue'] as $type => $revenue): 
-                                $percentage = $total_content_revenue > 0 ? ($revenue / $total_content_revenue) * 100 : 0;
-                            ?>
-                                <div class="content-type-item">
-                                    <div class="content-type-info">
-                                        <span class="content-type-name"><?php echo ucfirst($type); ?></span>
-                                        <span class="content-type-revenue">$<?php echo number_format($revenue, 2); ?></span>
-                                    </div>
-                                    <div class="content-type-bar">
-                                        <div class="content-type-fill" style="width: <?php echo $percentage; ?>%"></div>
-                                    </div>
-                                    <div class="content-type-percentage"><?php echo number_format($percentage, 1); ?>%</div>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                    
-                    <!-- Activity Patterns -->
-                    <div class="analytics-card">
-                        <h3>Peak Activity Insights</h3>
-                        <div class="activity-insights">
-                            <div class="insight-item">
-                                <strong>Peak Hour:</strong> <?php echo $performance_analytics['peak_hour']; ?>:00
-                                (<?php echo $performance_analytics['time_patterns']['hours'][$performance_analytics['peak_hour']]; ?> accesses)
-                            </div>
-                            <div class="insight-item">
-                                <strong>Peak Day:</strong> <?php echo $performance_analytics['peak_day']; ?>
-                                (<?php echo max($performance_analytics['time_patterns']['days']); ?> accesses)
-                            </div>
-                            <div class="insight-item">
-                                <strong>Total Unique Pages:</strong> <?php echo count($performance_analytics['page_analytics']); ?>
-                            </div>
-                            <div class="insight-item">
-                                <strong>Avg Value per Page:</strong> 
-                                $<?php echo number_format($portfolio_analysis['total_portfolio_value'] / count($performance_analytics['page_analytics']), 2); ?>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Competitive Intelligence -->
-            <div class="plontis-panel">
-                <h2>🎯 Competitive Intelligence</h2>
-                
-                <div class="competitive-grid">
-                    <?php foreach ($competitive_intel as $company => $strategy): ?>
-                        <div class="company-strategy-card">
-                            <h3><?php echo esc_html($company); ?></h3>
-                            <div class="strategy-overview">
-                                <div class="strategy-type"><?php echo $strategy['strategy']; ?></div>
-                                <div class="strategy-stats">
-                                    <div class="stat-item">
-                                        <span class="stat-label">Total Value:</span>
-                                        <span class="stat-value">$<?php echo number_format($strategy['total_value'], 2); ?></span>
-                                    </div>
-                                    <div class="stat-item">
-                                        <span class="stat-label">Avg Session Value:</span>
-                                        <span class="stat-value">$<?php echo number_format($strategy['avg_session_value'], 2); ?></span>
-                                    </div>
-                                    <div class="stat-item">
-                                        <span class="stat-label">Quality Focus:</span>
-                                        <span class="stat-value"><?php echo number_format($strategy['avg_quality_focus'], 0); ?>/100</span>
-                                    </div>
-                                    <div class="stat-item">
-                                        <span class="stat-label">Unique Pages:</span>
-                                        <span class="stat-value"><?php echo $strategy['unique_pages']; ?></span>
-                                    </div>
-                                </div>
-                                
-                                <div class="content-preferences">
-                                    <strong>Content Preferences:</strong>
-                                    <?php 
-                                    arsort($strategy['content_type_preference']);
-                                    $top_types = array_slice($strategy['content_type_preference'], 0, 3, true);
-                                    foreach ($top_types as $type => $count): ?>
-                                        <span class="preference-tag"><?php echo ucfirst($type); ?> (<?php echo $count; ?>)</span>
-                                    <?php endforeach; ?>
-                                </div>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            </div>
-
-            <!-- Revenue Forecasting -->
-            <div class="plontis-panel">
-                <h2>📈 Revenue Forecasting & Trends</h2>
-                
-                <div class="forecasting-grid">
-                    <div class="forecast-card">
-                        <h3>Revenue Projections</h3>
-                        <div class="projection-list">
-                            <div class="projection-item">
-                                <span class="projection-label">Daily Average:</span>
-                                <span class="projection-value">$<?php echo number_format($revenue_forecasting['projections']['daily_average'], 2); ?></span>
-                            </div>
-                            <div class="projection-item">
-                                <span class="projection-label">Weekly Projection:</span>
-                                <span class="projection-value">$<?php echo number_format($revenue_forecasting['projections']['weekly_projection'], 2); ?></span>
-                            </div>
-                            <div class="projection-item">
-                                <span class="projection-label">Monthly Projection:</span>
-                                <span class="projection-value">$<?php echo number_format($revenue_forecasting['projections']['monthly_projection'], 2); ?></span>
-                            </div>
-                            <div class="projection-item highlighted">
-                                <span class="projection-label">Annual Projection:</span>
-                                <span class="projection-value">$<?php echo number_format($revenue_forecasting['projections']['annual_projection'], 2); ?></span>
+                    <!-- Time Range Selector -->
+                    <div class="plontis-panel">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 20px;">
+                            <h2 style="margin: 0;">📊 Portfolio Analysis - Last <?php echo $days; ?> Days</h2>
+                            <div class="time-range-selector">
+                                <select onchange="window.location.href='?page=plontis-valuation&days=' + this.value">
+                                    <option value="7" <?php selected($days, 7); ?>>Last 7 Days</option>
+                                    <option value="30" <?php selected($days, 30); ?>>Last 30 Days</option>
+                                    <option value="90" <?php selected($days, 90); ?>>Last 90 Days</option>
+                                    <option value="180" <?php selected($days, 180); ?>>Last 6 Months</option>
+                                    <option value="365" <?php selected($days, 365); ?>>Last Year</option>
+                                </select>
                             </div>
                         </div>
                         
-                        <div class="scenario-analysis">
-                            <h4>Scenario Analysis</h4>
-                            <div class="scenario-item conservative">
-                                <span class="scenario-label">Conservative (70%):</span>
-                                <span class="scenario-value">$<?php echo number_format($revenue_forecasting['projections']['conservative_annual'], 2); ?></span>
-                            </div>
-                            <div class="scenario-item optimistic">
-                                <span class="scenario-label">Optimistic (150%):</span>
-                                <span class="scenario-value">$<?php echo number_format($revenue_forecasting['projections']['optimistic_annual'], 2); ?></span>
+                        <!-- Executive Summary -->
+                        <div class="executive-summary">
+                            <div class="summary-stats">
+                                <div class="summary-stat">
+                                    <h3>Total Portfolio Value</h3>
+                                   <div class="stat-value">$<?php echo number_format($portfolio_analysis['total_portfolio_value'], 2); ?></div>
+                                    <div class="stat-change <?php echo $revenue_forecasting['trends']['growth_rate'] > 0 ? 'positive' : 'negative'; ?>">
+                                        <?php echo $revenue_forecasting['trends']['trend_direction']; ?> 
+                                        (<?php echo number_format(abs($revenue_forecasting['trends']['growth_rate']), 1); ?>%)
+                                    </div>
+                                </div>
+                                <div class="summary-stat">
+                                    <h3>Portfolio Value Projection</h3>
+                                    <div class="stat-value">$<?php echo number_format($revenue_forecasting['projections']['annual_projection'], 2); ?></div>
+                                    <div class="stat-range">
+                                        $<?php echo number_format($revenue_forecasting['projections']['conservative_annual'], 2); ?> - 
+                                        $<?php echo number_format($revenue_forecasting['projections']['optimistic_annual'], 2); ?>
+                                    </div>
+                                </div>
+                                <div class="summary-stat">
+                                    <h3>Industry Ranking</h3>
+                                    <div class="stat-value"><?php echo ucfirst(str_replace('_', ' ', $industry_benchmarks['category'])); ?></div>
+                                    <div class="stat-change"><?php echo $industry_benchmarks['percentile']; ?></div>
+                                </div>
+                                <div class="summary-stat">
+                                    <h3>High-Value Opportunities</h3>
+                                    <div class="stat-value"><?php echo $portfolio_analysis['licensing_candidates']; ?></div>
+                                    <div class="stat-change">Ready for licensing</div>
+                                </div>
                             </div>
                         </div>
                     </div>
-                    
-                    <div class="forecast-card">
-                        <h3>Growth Trends</h3>
-                        <div class="trend-analysis">
-                            <div class="trend-item">
-                                <span class="trend-label">Growth Rate:</span>
-                                <span class="trend-value <?php echo $revenue_forecasting['trends']['growth_rate'] > 0 ? 'positive' : 'negative'; ?>">
-                                    <?php echo number_format($revenue_forecasting['trends']['growth_rate'], 1); ?>%
-                                </span>
+
+                    <div class="plontis-export-controls">
+                        <h3>📊 Export Report</h3>
+                        <div class="export-buttons">
+                            <span style="color: #6c757d; font-size: 14px;">Export this report in:</span>
+                            
+                            <a href="<?php echo wp_nonce_url(admin_url('admin.php?page=plontis-valuation&plontis_export=1&format=html&days=' . $days), 'plontis_export', 'nonce'); ?>" class="button" target="_blank">
+                                📄 HTML Report
+                            </a>
+                            
+                            <a href="<?php echo wp_nonce_url(admin_url('admin.php?page=plontis-valuation&plontis_export=1&format=csv&days=' . $days), 'plontis_export', 'nonce'); ?>" class="button">
+                                📊 CSV Data
+                            </a>
+                            
+                            <a href="<?php echo wp_nonce_url(admin_url('admin.php?page=plontis-valuation&plontis_export=1&format=json&days=' . $days), 'plontis_export', 'nonce'); ?>" class="button">
+                                🔗 JSON
+                            </a>
+                            
+                            <span style="color: #6c757d; font-size: 12px; margin-left: 10px;">
+                                Reports include all <?php echo count($enhanced_detections); ?> detections from the last <?php echo $days; ?> days
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Content Performance Analytics -->
+                    <div class="plontis-panel">
+                        <h2>📊 Content Performance Analytics</h2>
+                        
+                        <div class="analytics-grid">
+                            <!-- Top Performing Pages -->
+                            <div class="analytics-card">
+                                <h3>Top Revenue-Generating Pages</h3>
+                                <div class="performance-list">
+                                    <?php foreach (array_slice($performance_analytics['page_analytics'], 0, 10) as $page => $data): ?>
+                                    <div class="performance-item">
+                                        <div class="page-info">
+                                            <div class="page-url"><?php echo esc_html(substr($page, 0, 50)) . (strlen($page) > 50 ? '...' : ''); ?></div>
+                                            <div class="page-stats">
+                                                $<?php echo number_format($data['total_value'], 2); ?> (<?php echo $data['access_count']; ?> accesses, <?php echo $data['company_count']; ?> companies)
+                                            </div>
+                                        </div>
+                                        <div class="page-value">$<?php echo number_format($data['avg_value_per_access'], 2); ?>/access</div>
+                                    </div>
+                                    <?php endforeach; ?>
+                                </div>
                             </div>
-                            <div class="trend-item">
-                                <span class="trend-label">Trend Direction:</span>
-                                <span class="trend-value"><?php echo $revenue_forecasting['trends']['trend_direction']; ?></span>
+                            
+                            <!-- Content Type Revenue -->
+                            <div class="analytics-card">
+                                <h3>Revenue by Content Type</h3>
+                                <div class="content-type-chart">
+                                    <?php 
+                                    $total_content_revenue = array_sum($performance_analytics['content_type_revenue']);
+                                    foreach ($performance_analytics['content_type_revenue'] as $type => $revenue): 
+                                        $percentage = $total_content_revenue > 0 ? ($revenue / $total_content_revenue) * 100 : 0;
+                                    ?>
+                                    <div class="content-type-item">
+                                        <div class="content-type-info">
+                                            <span class="content-type-name"><?php echo ucfirst($type); ?></span>
+                                            <span class="content-type-revenue">$<?php echo number_format($revenue, 2); ?> (<?php echo number_format($percentage, 1); ?>%)</span>
+                                        </div>
+                                        <div class="content-type-bar">
+                                            <div class="content-type-fill" style="width: <?php echo $percentage; ?>%"></div>
+                                        </div>
+                                    </div>
+                                    <?php endforeach; ?>
+                                </div>
                             </div>
-                            <?php if (!empty($revenue_forecasting['trends']['peak_season'])): ?>
-                            <div class="trend-item">
-                                <span class="trend-label">Peak Season:</span>
-                                <span class="trend-value">Month <?php echo $revenue_forecasting['trends']['peak_season']; ?></span>
+                            
+                            <!-- Activity Patterns -->
+                            <div class="analytics-card">
+                                <h3>Peak Activity Insights</h3>
+                                <div class="activity-insights">
+                                    <div class="insight-item">
+                                        <strong>Peak Hour:</strong> <?php echo $performance_analytics['peak_hour']; ?>:00 (<?php echo $performance_analytics['time_patterns']['hours'][$performance_analytics['peak_hour']]; ?> accesses)
+                                    </div>
+                                    <div class="insight-item">
+                                        <strong>Peak Day:</strong> <?php echo $performance_analytics['peak_day']; ?> (<?php echo max($performance_analytics['time_patterns']['days']); ?> accesses)
+                                    </div>
+                                    <div class="insight-item">
+                                        <strong>Total Unique Pages:</strong> <?php echo count($performance_analytics['page_analytics']); ?> pages
+                                    </div>
+                                    <div class="insight-item">
+                                        <strong>Avg Value per Page:</strong> $<?php echo number_format($portfolio_analysis['total_portfolio_value'] / count($performance_analytics['page_analytics']), 2); ?>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Competitive Intelligence -->
+                    <div class="plontis-panel">
+                        <h2>🎯 Competitive Intelligence</h2>
+                        
+                        <div class="competitive-grid">
+                            <?php foreach ($competitive_intel as $company => $strategy): ?>
+                            <div class="company-strategy-card">
+                                <h3><?php echo esc_html($company); ?></h3>
+                                <div class="strategy-overview">
+                                    <div class="strategy-type"><?php echo $strategy['strategy']; ?></div>
+                                    <div class="strategy-stats">
+                                        <div class="stat-item">
+                                            <span class="stat-label">Total Value</span>
+                                            <span class="stat-value">$<?php echo number_format($strategy['total_value'], 2); ?></span>
+                                        </div>
+                                        <div class="stat-item">
+                                            <span class="stat-label">Avg Session</span>
+                                            <span class="stat-value">$<?php echo number_format($strategy['avg_session_value'], 2); ?></span>
+                                        </div>
+                                        <div class="stat-item">
+                                            <span class="stat-label">Unique Pages</span>
+                                            <span class="stat-value"><?php echo $strategy['unique_pages']; ?></span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="content-preferences">
+                                        <strong>Content Preferences:</strong>
+                                        <?php 
+                                        arsort($strategy['content_type_preference']);
+                                        $top_types = array_slice($strategy['content_type_preference'], 0, 3, true);
+                                        foreach ($top_types as $type => $count): ?>
+                                            <span class="preference-tag"><?php echo ucfirst($type); ?> (<?php echo $count; ?>)</span>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                            </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+
+                    <!-- Industry Benchmarking -->
+                    <div class="plontis-panel">
+                        <h2>📊 Industry Benchmarking</h2>
+                        
+                        <div class="benchmarking-overview">
+                            <div class="benchmark-card">
+                                <h3>Your Current Position</h3>
+                                <div class="benchmark-position">
+                                    <div class="position-category"><?php echo ucfirst(str_replace('_', ' ', $industry_benchmarks['category'])); ?></div>
+                                    <div class="position-percentile"><?php echo $industry_benchmarks['percentile']; ?></div>
+                                    <div class="position-value">$<?php echo number_format($portfolio_analysis['estimated_annual_revenue'], 2); ?> annual</div>
+                                </div>
+                            </div>
+                            
+                            <div class="benchmark-card">
+                                <h3>Industry Standards</h3>
+                                <div class="benchmark-ranges">
+                                    <div class="range-item">
+                                        <span class="range-label">Low:</span>
+                                        <span class="range-value">$<?php echo number_format($industry_benchmarks['benchmark_data']['low'], 2); ?></span>
+                                    </div>
+                                    <div class="range-item">
+                                        <span class="range-label">Average:</span>
+                                        <span class="range-value">$<?php echo number_format($industry_benchmarks['benchmark_data']['average'], 2); ?></span>
+                                    </div>
+                                    <div class="range-item">
+                                        <span class="range-label">High:</span>
+                                        <span class="range-value">$<?php echo number_format($industry_benchmarks['benchmark_data']['high'], 2); ?></span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <?php if ($industry_benchmarks['next_tier_target']): ?>
+                            <div class="benchmark-card">
+                                <h3>Next Tier Target</h3>
+                                <div class="next-tier">
+                                    <div class="tier-name"><?php echo ucfirst(str_replace('_', ' ', $industry_benchmarks['next_tier_target']['tier'])); ?></div>
+                                    <div class="tier-target">$<?php echo number_format($industry_benchmarks['next_tier_target']['target_value'], 2); ?></div>
+                                    <div class="tier-gap">
+                                        $<?php echo number_format($industry_benchmarks['next_tier_target']['target_value'] - $portfolio_analysis['estimated_annual_revenue'], 2); ?> to reach
+                                    </div>
+                                </div>
                             </div>
                             <?php endif; ?>
                         </div>
+                        
+                        <?php if ($industry_benchmarks['improvement_potential'] > 0): ?>
+                        <div class="improvement-potential">
+                            <h3>Growth Potential</h3>
+                            <p>You have <strong>$<?php echo number_format($industry_benchmarks['improvement_potential'], 2); ?></strong> in improvement potential within your current category.</p>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+
+                    <!-- CTA Section -->
+                    <div class="plontis-cta">
+                        <h3>Ready to Maximize Your Content Value?</h3>
+                        <p>Your content portfolio shows strong licensing potential. Take the next step to monetize your AI bot traffic.</p>
+                        <div class="cta-buttons">
+                            <a href="https://plontis.com" class="button button-primary" target="_blank">
+                                Explore Licensing Platform
+                            </a>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Licensing Strategy Recommendations -->
-            <div class="plontis-panel">
-                <h2>💼 Strategic Licensing Recommendations</h2>
-                
-                <div class="licensing-strategies">
-                    <?php foreach ($licensing_strategies as $strategy): ?>
-                        <div class="strategy-card priority-<?php echo strtolower($strategy['priority']); ?>">
-                            <div class="strategy-header">
-                                <h3><?php echo $strategy['category']; ?></h3>
-                                <span class="priority-badge priority-<?php echo strtolower($strategy['priority']); ?>">
-                                    <?php echo $strategy['priority']; ?> Priority
-                                </span>
-                            </div>
+                <script>
+                    // Add some interactive functionality
+                    document.addEventListener('DOMContentLoaded', function() {
+                        // Animate cards on scroll
+                        const observer = new IntersectionObserver((entries) => {
+                            entries.forEach(entry => {
+                                if (entry.isIntersecting) {
+                                    entry.target.style.opacity = '1';
+                                    entry.target.style.transform = 'translateY(0)';
+                                }
+                            });
+                        });
+
+                        // Observe all cards
+                        document.querySelectorAll('.analytics-card, .company-strategy-card, .strategy-card, .risk-card, .benchmark-card').forEach(card => {
+                            card.style.opacity = '0';
+                            card.style.transform = 'translateY(20px)';
+                            card.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+                            observer.observe(card);
+                        });
+
+                        // Animate progress bars
+                        setTimeout(() => {
+                            document.querySelectorAll('.content-type-fill').forEach(bar => {
+                                const width = bar.style.width;
+                                bar.style.width = '0%';
+                                setTimeout(() => {
+                                    bar.style.width = width;
+                                }, 100);
+                            });
+                        }, 500);
+
+                        // Add hover effects to stat cards
+                        document.querySelectorAll('.summary-stat').forEach(stat => {
+                            stat.addEventListener('mouseenter', function() {
+                                this.style.transform = 'translateY(-8px) scale(1.02)';
+                            });
                             
-                            <div class="strategy-content">
-                                <p class="strategy-description"><?php echo $strategy['description']; ?></p>
-                                
-                                <div class="strategy-metrics">
-                                    <div class="metric-item">
-                                        <span class="metric-label">Potential Revenue:</span>
-                                        <span class="metric-value">$<?php echo number_format($strategy['potential_revenue'], 2); ?></span>
-                                    </div>
-                                    <div class="metric-item">
-                                        <span class="metric-label">Timeline:</span>
-                                        <span class="metric-value"><?php echo $strategy['timeline']; ?></span>
-                                    </div>
-                                    <?php if (isset($strategy['strategy_insight'])): ?>
-                                    <div class="metric-item">
-                                        <span class="metric-label">Strategy Insight:</span>
-                                        <span class="metric-value"><?php echo $strategy['strategy_insight']; ?></span>
-                                    </div>
-                                    <?php endif; ?>
-                                </div>
-                                
-                                <div class="action-items">
-                                    <h4>Action Items:</h4>
-                                    <ul>
-                                        <?php foreach ($strategy['action_items'] as $action): ?>
-                                            <li><?php echo esc_html($action); ?></li>
-                                        <?php endforeach; ?>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            </div>
+                            stat.addEventListener('mouseleave', function() {
+                                this.style.transform = 'translateY(0) scale(1)';
+                            });
+                        });
 
-            <!-- Risk Assessment -->
-            <div class="plontis-panel">
-                <h2>⚠️ Risk Assessment & Compliance</h2>
-                
-                <div class="risk-assessment-grid">
-                    <?php foreach ($risk_assessment['risk_factors'] as $risk_type => $risk_data): ?>
-                        <div class="risk-card risk-<?php echo strtolower($risk_data['risk_level']); ?>">
-                            <h3><?php echo ucfirst(str_replace('_', ' ', $risk_type)); ?></h3>
-                            <div class="risk-metrics">
-                                <div class="risk-count"><?php echo $risk_data['count']; ?> instances</div>
-                                <div class="risk-level"><?php echo $risk_data['risk_level']; ?> Risk</div>
-                            </div>
-                            <p class="risk-description"><?php echo $risk_data['description']; ?></p>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-                
-                <div class="compliance-recommendations">
-                    <h3>Compliance Recommendations</h3>
-                    <ul class="recommendation-list">
-                        <?php foreach ($risk_assessment['recommendations'] as $recommendation): ?>
-                            <li><?php echo esc_html($recommendation); ?></li>
-                        <?php endforeach; ?>
-                    </ul>
-                </div>
-            </div>
-
-            <!-- Industry Benchmarking -->
-            <div class="plontis-panel">
-                <h2>📊 Industry Benchmarking</h2>
-                
-                <div class="benchmarking-overview">
-                    <div class="benchmark-card">
-                        <h3>Your Current Position</h3>
-                        <div class="benchmark-position">
-                            <div class="position-category"><?php echo ucfirst(str_replace('_', ' ', $industry_benchmarks['category'])); ?></div>
-                            <div class="position-percentile"><?php echo $industry_benchmarks['percentile']; ?></div>
-                            <div class="position-value">$<?php echo number_format($portfolio_analysis['estimated_annual_revenue'], 2); ?> annual</div>
-                        </div>
-                    </div>
-                    
-                    <div class="benchmark-card">
-                        <h3>Industry Standards</h3>
-                        <div class="benchmark-ranges">
-                            <div class="range-item">
-                                <span class="range-label">Low:</span>
-                                <span class="range-value">$<?php echo number_format($industry_benchmarks['benchmark_data']['low'], 2); ?></span>
-                            </div>
-                            <div class="range-item">
-                                <span class="range-label">Average:</span>
-                                <span class="range-value">$<?php echo number_format($industry_benchmarks['benchmark_data']['average'], 2); ?></span>
-                            </div>
-                            <div class="range-item">
-                                <span class="range-label">High:</span>
-                                <span class="range-value">$<?php echo number_format($industry_benchmarks['benchmark_data']['high'], 2); ?></span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <?php if ($industry_benchmarks['next_tier_target']): ?>
-                    <div class="benchmark-card">
-                        <h3>Next Tier Target</h3>
-                        <div class="next-tier">
-                            <div class="tier-name"><?php echo ucfirst(str_replace('_', ' ', $industry_benchmarks['next_tier_target']['tier'])); ?></div>
-                            <div class="tier-target">$<?php echo number_format($industry_benchmarks['next_tier_target']['target_value'], 2); ?></div>
-                            <div class="tier-gap">
-                                $<?php echo number_format($industry_benchmarks['next_tier_target']['target_value'] - $portfolio_analysis['estimated_annual_revenue'], 2); ?> to reach
-                            </div>
-                        </div>
-                    </div>
-                    <?php endif; ?>
-                </div>
-                
-                <?php if ($industry_benchmarks['improvement_potential'] > 0): ?>
-                <div class="improvement-potential">
-                    <h3>Growth Potential</h3>
-                    <p>You have <strong>$<?php echo number_format($industry_benchmarks['improvement_potential'], 2); ?></strong> 
-                    in improvement potential within your current category.</p>
-                </div>
-                <?php endif; ?>
-            </div>
-
-            <!-- CTA Section -->
-            <div class="plontis-cta">
-                <h3>Ready to Maximize Your Content Value?</h3>
-                <p>Your content portfolio shows strong licensing potential. Take the next step to monetize your AI bot traffic.</p>
-                <div class="cta-buttons">
-                    <a href="https://plontis.com" class="button button-primary button-hero" target="_blank">
-                        Explore Licensing Platform
-                    </a>
-                </div>
-            </div>
-        </div>
-        <?php
-    }
-
-    public function add_dashboard_widget() {
-        wp_add_dashboard_widget(
-            'plontis_enhanced_widget',
-            'Plontis - AI Content Valuation',
-            [$this, 'enhanced_dashboard_widget_content']
-        );
-    }
-
-    public function enhanced_dashboard_widget_content() {
-        global $wpdb;
-        $table_name = $wpdb->prefix . 'plontis_detections';
-        
-        // Get last 7 days of data
-        $recent_detections = $wpdb->get_results(
-            "SELECT * FROM $table_name WHERE detected_at > DATE_SUB(NOW(), INTERVAL 7 DAY)",
-            ARRAY_A
-        );
-        
-        if (empty($recent_detections)) {
-            echo '<p>No AI bot activity detected in the last 7 days.</p>';
-            echo '<p><a href="' . admin_url('admin.php?page=plontis') . '" class="button">View Dashboard</a></p>';
-            return;
-        }
-        
-        // Quick calculation
-        $total_value = 0;
-        $high_value_count = 0;
-        
-        foreach ($recent_detections as $detection) {
-            try {
-                $content_metadata = $this->content_analyzer->analyzeContent($detection['request_uri']);
-                $detection_data = [
-                    'company' => $detection['company'],
-                    'bot_type' => $detection['bot_type'],
-                    'request_uri' => $detection['request_uri'],
-                    'risk_level' => $detection['risk_level'],
-                    'confidence' => intval($detection['confidence'] ?? 50),
-                    'commercial_risk' => $detection['commercial_risk']
-                ];
-                
-                $valuation = $this->value_calculator->calculateContentValue($detection_data, $content_metadata);
-                $value = $valuation['estimated_value'];
-                $total_value += $value;
-                
-                if ($value > 50) {
-                    $high_value_count++;
-                }
-            } catch (Exception $e) {
-                // Skip failed calculations
-            }
-        }
-        
-        ?>
-        <div class="plontis-dashboard-widget">
-            <div class="widget-stats">
-                <div class="stat-item">
-                    <strong><?php echo count($recent_detections); ?></strong>
-                    <span>AI bot detections this week</span>
-                </div>
-                <div class="stat-item">
-                    <strong>$<?php echo number_format($total_value, 2); ?></strong>
-                    <span>Content value generated</span>
-                </div>
-                <div class="stat-item">
-                    <strong><?php echo $high_value_count; ?></strong>
-                    <span>High-value opportunities</span>
-                </div>
-            </div>
-            
-            <div class="widget-actions">
-                <a href="<?php echo admin_url('admin.php?page=plontis-valuation'); ?>" class="button button-primary">
-                    📊 View Detailed Report
-                </a>
-                <a href="<?php echo admin_url('admin.php?page=plontis-reports'); ?>" class="button">
-                    📁 Report Archive
-                </a>
-                <a href="https://plontis.ai/licensing" target="_blank" class="button">
-                    💰 Start Licensing
-                </a>
-            </div>
-            
-            <?php if ($total_value > 1000): ?>
-            <div class="widget-alert">
-                <p><strong>💡 Licensing Opportunity Detected!</strong></p>
-                <p>Your content value this week suggests strong licensing potential. Consider reaching out to AI companies for revenue opportunities.</p>
-            </div>
-            <?php endif; ?>
-        </div>
+                        // Smooth scrolling for internal links
+                        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                            anchor.addEventListener('click', function (e) {
+                                e.preventDefault();
+                                const target = document.querySelector(this.getAttribute('href'));
+                                if (target) {
+                                    target.scrollIntoView({
+                                        behavior: 'smooth',
+                                        block: 'start'
+                                    });
+                                }
+                            });
+                        });
+                    });
+                </script>
+            </body>
+            </html>
         
         <?php
     }

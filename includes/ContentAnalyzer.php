@@ -88,6 +88,13 @@ class PlontisContentAnalyzer {
             return $this->analysis_cache[$cache_key];
         }
         
+        // HANDLE SYSTEM/BOT URLs that aren't content
+        if ($this->isSystemUrl($url)) {
+            $analysis = $this->getSystemUrlAnalysis($url);
+            $this->analysis_cache[$cache_key] = $analysis;
+            return $analysis;
+        }
+        
         // Try to get content from WordPress if it's a local URL
         $content_data = $this->getWordPressContent($url);
         
@@ -104,6 +111,65 @@ class PlontisContentAnalyzer {
         
         return $analysis;
     }
+
+    private function isSystemUrl($url) {
+        $system_patterns = [
+            '/robots\.txt$/',       // ← Added closing /
+            '/sitemap\.xml$/',      // ← Added closing /
+            '/sitemap.*\.xml$/',    // ← Added closing /
+            '/favicon\.ico$/',      // ← Added closing /
+            '/\.well-known/',       // ← Already correct
+            '/wp-admin/',           // ← Already correct  
+            '/wp-content/',         // ← Already correct
+            '/wp-includes/',        // ← Already correct
+            '/ads\.txt$/',          // ← Added closing /
+            '/security\.txt$/',     // ← Added closing /
+            '/humans\.txt$/'        // ← Added closing /
+        ];
+        
+        foreach ($system_patterns as $pattern) {
+            if (preg_match($pattern, $url)) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    private function getSystemUrlAnalysis($url) {
+        // Determine what type of system file it is
+        $analysis = [
+            'content_type' => 'system_file',
+            'word_count' => 0,
+            'characteristics' => ['system_access'],
+            'quality_score' => 25, // Lower quality for system files - not content
+            'estimated_read_time' => 0,
+            'technical_depth' => 'basic',
+            'commercial_value' => 'low',
+            'metadata' => [
+                'analysis_method' => 'system_url',
+                'confidence' => 'high'
+            ]
+        ];
+        
+        // Specific handling for different system files
+        if (preg_match('/robots\.txt$/', $url)) {
+            $analysis['system_file_type'] = 'robots_txt';
+            $analysis['purpose'] = 'Checking crawl permissions and sitemap locations';
+            $analysis['quality_score'] = 20; // Very low quality - not content
+        } elseif (preg_match('/sitemap.*\.xml$/', $url)) {
+            $analysis['system_file_type'] = 'sitemap';
+            $analysis['purpose'] = 'Discovering content structure and URLs';
+            $analysis['quality_score'] = 30; // Slightly higher - shows content organization
+        } elseif (preg_match('/favicon\.ico$/', $url)) {
+            $analysis['system_file_type'] = 'favicon';
+            $analysis['content_type'] = 'image';
+            $analysis['quality_score'] = 15; // Very low - just an icon
+        }
+        
+        return $analysis;
+    }
+
     
     /**
      * Get content from WordPress if it's a local URL
@@ -419,16 +485,30 @@ class PlontisContentAnalyzer {
     private function getBasicAnalysis($url) {
         $url_analysis = $this->analyzeUrl($url);
         
+        // Determine quality based on URL structure
+        $base_quality = 50; // Default
+        
+        // Lower quality for obvious non-content URLs
+        if (preg_match('/\.(js|css|png|jpg|gif|ico|woff|ttf)$/i', $url)) {
+            $base_quality = 10; // Asset files
+        } elseif (preg_match('/\/(wp-admin|wp-content|wp-includes)/', $url)) {
+            $base_quality = 15; // WordPress system files
+        } elseif (preg_match('/\/(api|ajax|admin)/', $url)) {
+            $base_quality = 20; // API endpoints
+        }
+        
         return [
             'content_type' => $url_analysis['content_type'],
-            'word_count' => 500, // Estimated
+            'word_count' => 0, // No content found
             'characteristics' => $url_analysis['characteristics'],
-            'quality_score' => 50, // Default
+            'quality_score' => $base_quality, // ★ ENSURE THIS IS ALWAYS SET
+            'estimated_read_time' => 0,
             'technical_depth' => 'basic',
-            'commercial_value' => 'medium',
+            'commercial_value' => 'low', // Non-existent content has low value
             'metadata' => [
                 'analysis_method' => 'url_only',
-                'confidence' => 'low'
+                'confidence' => 'low',
+                'reason' => 'No content found at URL'
             ]
         ];
     }
@@ -497,4 +577,3 @@ class PlontisContentAnalyzer {
         $this->analysis_cache = [];
     }
 }
-?>
